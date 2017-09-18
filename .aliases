@@ -21,6 +21,7 @@ alias lesswatch="node ~/less-watch-compiler.js"
 alias undupe="ruby ~/undupe.rb $1"
 alias clean="find . -name ".DS_Store" -depth -exec rm {} \;" # Remove .DS_Store files recursively
 alias wgets='H="--header"; wget $H="Accept-Language: en-us,en;q=0.5" $H="Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" $H="Connection: keep-alive" -U "Mozilla/5.0 (Windows NT 5.1; rv:10.0.2) Gecko/20100101 Firefox/10.0.2" --referer=/ ' # Make wget impose as a browser
+alias killdups='/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user;killall Finder;echo "Rebuilt Open With, relaunching Finder"'
 
 # Faster npm for Europeans & Asians (-.-)
 alias npme="npm --registry http://registry.npmjs.eu/"
