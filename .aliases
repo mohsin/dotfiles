@@ -7,6 +7,7 @@ alias ....="cd ../../.."
 alias .....="cd ../../../.."
 alias ~="cd ~" # `cd` is probably faster to type though
 alias -- -="cd -"
+alias s="subl"
 
 # Shortcuts
 alias www="cd /Applications/XAMPP/xamppfiles/htdocs" # DocumentRoot folder to web server
