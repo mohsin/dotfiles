@@ -664,6 +664,9 @@ open "${HOME}/init/Solarized Dark.itermcolors"
 # Don’t display the annoying prompt when quitting iTerm
 defaults write com.googlecode.iterm2 PromptOnQuit -bool false
 
+# Start the service to build a search db for locate command
+sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.locate.plist
+
 ###############################################################################
 # Time Machine                                                                #
 ###############################################################################
