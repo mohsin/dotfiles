@@ -212,3 +212,37 @@ function sync() {
 	  sleep 1
 	done
 }
+
+# Clone and set up a new instance of OctoberCMS
+function october() {
+	local target_dir="october"
+  if [ ! -z "${1}" ]; then
+    target_dir="${1}"
+  fi;
+  echo $target_dir
+	git clone -b develop https://github.com/octobercms/october $target_dir
+	cd $target_dir
+	pushd $(pwd) > /dev/null
+	composer install
+	git reset --hard origin/develop
+	valet link $target_dir
+	echo "Set application URL to http://$target_dir.$(valet tld)"
+	php artisan october:install
+}
+
+# Clone and set up a new instance of OctoberCMS from my forked repo
+function myoctober() {
+	local target_dir="october"
+  if [ ! -z "${1}" ]; then
+    target_dir="${1}"
+  fi;
+  echo $target_dir
+	git clone -b develop https://github.com/SaifurRahmanMohsin/october $target_dir
+	cd $target_dir
+	pushd $(pwd) > /dev/null
+	composer install
+	git reset --hard origin/develop
+	valet link $target_dir
+	echo "Set application URL to http://$target_dir.$(valet tld)"
+	php artisan october:install
+}
