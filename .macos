@@ -898,6 +898,14 @@ defaults write com.twitter.twitter-mac HideInBackground -bool true
 defaults write com.tapbots.TweetbotMac OpenURLsDirectly -bool true
 
 ###############################################################################
+# PHP Composer                                                                #
+###############################################################################
+
+# Install composer and make it globally accessible
+curl -sS https://getcomposer.org/installer | php
+mv composer.phar /usr/local/bin/composer
+
+###############################################################################
 # Kill affected applications                                                  #
 ###############################################################################
 

@@ -106,9 +106,8 @@ brew install pdf2image
 brew install wine
 brew install dark-mode
 
-# Install composer and make it globally accessible
-curl -sS https://getcomposer.org/installer | php
-mv composer.phar /usr/local/bin/composer
+# Install phpcs
+brew install php-code-sniffer
 
 # Install Node.js. Note: this installs `npm` too, using the recommended
 # installation method.
