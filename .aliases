@@ -132,7 +132,7 @@ alias urlencode='python -c "import sys, urllib as ul; print ul.quote_plus(sys.ar
 alias mergepdf='/System/Library/Automator/Combine\ PDF\ Pages.action/Contents/Resources/join.py'
 
 # Youtube-dl
-alias video='cd ~/Movies && youtube-dl'
+alias video='youtube-dl -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4"'
 
 # Disable Spotlight
 alias spotoff="sudo mdutil -a -i off"
