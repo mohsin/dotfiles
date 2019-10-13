@@ -1,6 +1,15 @@
 # Add `~/bin` to the `$PATH`
 export PATH="$HOME/bin:$PATH";
 
+# Add `~/.composer/vendor/bin` to the `$PATH`
+export PATH="$HOME/.composer/vendor/bin:$PATH";
+
+# Add Homebrew's sbin to the `$PATH`
+export PATH="/usr/local/sbin:$PATH"
+
+# Add Android Studio's ADB to the `$PATH`
+export PATH="$HOME/Library/Android/sdk/platform-tools/:$PATH"
+
 # Load the shell dotfiles, and then some:
 # * ~/.path can be used to extend `$PATH`.
 # * ~/.extra can be used for other settings you don’t want to commit.
