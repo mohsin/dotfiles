@@ -35,6 +35,9 @@ fi;
 # Install `wget` with IRI support.
 brew install wget --with-iri
 
+# Install youtube-dl
+brew install youtube-dl
+
 # Install GnuPG to enable PGP-signing commits.
 brew install gnupg
 
@@ -45,6 +48,7 @@ brew install openssh
 brew install screen
 brew install php
 brew install gmp
+brew cask install meld
 
 # Install font tools.
 brew tap bramstein/webfonttools
@@ -109,6 +113,9 @@ brew install dark-mode
 
 # Install phpcs
 brew install php-code-sniffer
+
+# Install ffmpeg
+brew install ffmpeg
 
 # Install Node.js. Note: this installs `npm` too, using the recommended
 # installation method.
