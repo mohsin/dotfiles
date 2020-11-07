@@ -121,5 +121,8 @@ brew install ffmpeg
 # installation method.
 brew install node
 
+# Install tor
+brew install tor
+
 # Remove outdated versions from the cellar.
 brew cleanup
