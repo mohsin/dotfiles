@@ -14,7 +14,7 @@ function rezip() {
     return 1
   fi;
   local filename="${@%/}"
-  if [ ${filename##*.} == "zip" ]; then
+  if [ "${filename##*.}" = "zip" ]; then    # Fixed line
     [ -f "${filename}" ] && echo Fixing ${filename} && zip -d ${filename} \*.DS_Store || true && zip -d ${filename} __MACOSX/
   else
     echo "Invalid file format"
