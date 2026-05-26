@@ -124,5 +124,8 @@ brew install node
 # Install tor
 brew install tor
 
+# Install Claude Code (Anthropic's terminal AI coding assistant).
+brew install --cask claude-code
+
 # Remove outdated versions from the cellar.
 brew cleanup
