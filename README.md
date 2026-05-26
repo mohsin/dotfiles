@@ -80,4 +80,3 @@ When setting up a new Mac, you may want to install some common [Homebrew](https:
 ```bash
 ./brew.sh
 ```
-
