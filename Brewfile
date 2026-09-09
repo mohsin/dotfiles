@@ -4,7 +4,12 @@
 #
 # Only tools that get used directly are listed; libraries arrive as dependencies.
 
-tap "shivammathur/php"   # PHP 7.x builds that homebrew/core no longer ships
+# Third-party taps. Homebrew 6 ignores their formulae until trusted, hence `trusted: true`.
+tap "shivammathur/php"          # PHP 7.x builds that homebrew/core no longer ships
+tap "hashicorp/tap"             # terraform
+tap "mongodb/brew"              # mongodb-community
+tap "bramstein/webfonttools"    # sfnt2woff
+tap "gromgit/fuse"              # ntfs-3g-mac
 
 # --- Shell and core utilities -------------------------------------------------
 brew "bash"                # modern Bash for scripts (the login shell is zsh)
@@ -89,6 +94,8 @@ brew "nginx", restart_service: :changed
 brew "dnsmasq"             # Laravel Valet
 brew "phpmyadmin"
 brew "mongosh"
+brew "mongodb/brew/mongodb-community", trusted: true   # start on demand: brew services run mongodb-community
+brew "mongodb/brew/mongodb-database-tools", trusted: true
 brew "supabase"
 brew "asimov", restart_service: :changed   # keep dependency folders out of Time Machine
 
@@ -101,6 +108,7 @@ brew "cmctl"               # cert-manager
 brew "aws-sam-cli"
 brew "k6"                  # load testing
 brew "certbot"
+brew "hashicorp/tap/terraform", trusted: true
 brew "lsyncd"              # live directory sync to remote hosts
 brew "lftp"
 cask "lando"
@@ -121,6 +129,8 @@ brew "pandoc"              # `mdcopy` function
 brew "graphviz"
 brew "potrace"             # bitmap to vector
 brew "woff2"
+brew "bramstein/webfonttools/sfnt2woff", trusted: true         # WOFF conversion for web fonts
+brew "bramstein/webfonttools/sfnt2woff-zopfli", trusted: true
 brew "advancecomp"         # recompress PNG and ZIP
 
 # --- Security, reverse engineering and networking -----------------------------
@@ -139,6 +149,7 @@ brew "libimobiledevice", args: ["HEAD"]
 brew "ios-webkit-debug-proxy", args: ["HEAD"]
 cask "blobsaver"
 cask "macfuse"
+brew "gromgit/fuse/ntfs-3g-mac", trusted: true   # write to NTFS drives (needs macfuse)
 
 # --- VS Code (kept only for Xdebug, Jupyter and .NET debugging) ----------------
 vscode "bradlc.vscode-tailwindcss"
