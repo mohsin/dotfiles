@@ -9,16 +9,99 @@ function sd() {
 
 # Cleans an OS X zipped file by removing __MACOSX and .DS_Store files
 function rezip() {
-  if [ -z "${1}" ]; then
-    echo "Usage: \`rezip file.zip\`"
-    return 1
-  fi;
-  local filename="${@%/}"
-  if [ "${filename##*.}" = "zip" ]; then    # Fixed line
-    [ -f "${filename}" ] && echo Fixing ${filename} && zip -d ${filename} \*.DS_Store || true && zip -d ${filename} __MACOSX/
-  else
-    echo "Invalid file format"
-  fi
+	if [ -z "${1}" ]; then
+		echo "Usage: \`rezip file.zip\`"
+		return 1
+	fi;
+	local filename="${@%/}"
+	if [ "${filename##*.}" = "zip" ]; then
+		[ -f "${filename}" ] && echo Fixing ${filename} && zip -d ${filename} \*.DS_Store || true && zip -d ${filename} __MACOSX/
+	else
+		echo "Invalid file format"
+	fi
+}
+
+# Concatenate every file under the given folders into one annotated output file
+# (handy for feeding a whole codebase to an LLM). The first argument is a file
+# extension to include, or "*" for every file. Non-UTF-8 files are skipped.
+# Usage: _combine_files <ext|*> <output_file> <input_folder> [input_folder ...]
+function _combine_files() {
+	local ext="${1}"; shift
+	local output_file
+	output_file=$(realpath -m "${1}"); shift
+	mkdir -p "$(dirname "${output_file}")"
+
+	{
+		[ "${ext}" = "php" ] && echo "<?php"
+		echo "/* Combined ${ext} files from multiple directories */"
+		echo "/* Input directories: $* */"
+		echo "/* Generated on $(date) */"
+		echo ""
+	} > "${output_file}"
+
+	local total_files=0 invalid_dirs=0 input_folder file file_count
+	for input_folder in "$@"; do
+		input_folder=$(realpath -m "${input_folder}")
+		if [ ! -d "${input_folder}" ]; then
+			echo "Warning: '${input_folder}' is not a valid directory. Skipping."
+			invalid_dirs=$((invalid_dirs + 1))
+			continue
+		fi
+
+		printf '/* Processing directory: %s */\n\n' "${input_folder}" >> "${output_file}"
+		file_count=0
+		while IFS= read -r file; do
+			[ -z "${file}" ] && continue
+			# Never swallow the output file itself
+			[ "$(realpath -m "${file}")" = "${output_file}" ] && continue
+			if ! iconv -f UTF-8 -t UTF-8 < "${file}" > /dev/null 2>&1; then
+				echo "Skipping file with invalid UTF-8: ${file}"
+				continue
+			fi
+			printf '/* File: %s */\n\n' "${file}" >> "${output_file}"
+			cat "${file}" >> "${output_file}"
+			printf '\n/* End of file: %s */\n\n' "${file}" >> "${output_file}"
+			file_count=$((file_count + 1))
+		done < <(if [ "${ext}" = "*" ]; then find "${input_folder}" -type f; else find "${input_folder}" -type f -name "*.${ext}"; fi | sort)
+
+		printf '/* Processed %s files from %s */\n\n' "${file_count}" "${input_folder}" >> "${output_file}"
+		total_files=$((total_files + file_count))
+		echo "Processed ${file_count} files from '${input_folder}'"
+	done
+
+	[ "${ext}" = "php" ] && echo "?>" >> "${output_file}"
+
+	echo "----------------------------------------"
+	echo "Summary:"
+	echo "- Total input directories: $#"
+	echo "- Valid directories processed: $(($# - invalid_dirs))"
+	echo "- Total files combined: ${total_files}"
+	echo "- Output file: ${output_file}"
+
+	if [ "${total_files}" -eq 0 ]; then
+		echo "Warning: No files were found in the specified directories."
+		return 1
+	fi
+}
+
+# Combine every file under the given folders into one file
+# Usage: combine_all_files <output_file> <input_folder> [input_folder ...]
+function combine_all_files() {
+	if [ "$#" -lt 2 ]; then
+		echo "Usage: combine_all_files <output_file> <input_folder1> [input_folder2 ...]"
+		return 1
+	fi
+	_combine_files "*" "$@"
+}
+
+# Combine every PHP file under the given folders into one file
+# Usage: combine_php_files <output_file> <input_folder> [input_folder ...]
+function combine_php_files() {
+	if [ "$#" -lt 2 ]; then
+		echo "Usage: combine_php_files <output_file> <input_folder1> [input_folder2 ...]"
+		return 1
+	fi
+	_combine_files "php" "$@"
 }
 
 # Create a new directory and enter it
@@ -29,6 +112,12 @@ function mkd() {
 # Change working directory to the top-most Finder window location
 function cdf() { # short for `cdfinder`
 	cd "$(osascript -e 'tell app "Finder" to POSIX path of (insertion location as alias)')";
+}
+
+# Lines added and removed by the current git user across the history of this repo
+function mystats() {
+	git log --author="$(git config user.name)" --pretty=tformat: --numstat \
+		| awk '{ add += $1; subs += $2; loc += $1 - $2 } END { printf "added lines: %s, removed lines: %s, total lines: %s\n", add, subs, loc }' -
 }
 
 # Create a .tar.gz archive, using `zopfli`, `pigz` or `gzip` for compression
@@ -102,7 +191,7 @@ function server() {
 	sleep 1 && open "http://localhost:${port}/" &
 	# Set the default Content-Type to `text/plain` instead of `application/octet-stream`
 	# And serve everything as UTF-8 (although not technically correct, this doesn’t break anything for binary files)
-	python -c $'import SimpleHTTPServer;\nmap = SimpleHTTPServer.SimpleHTTPRequestHandler.extensions_map;\nmap[""] = "text/plain";\nfor key, value in map.items():\n\tmap[key] = value + ";charset=UTF-8";\nSimpleHTTPServer.test();' "$port";
+	python3 -c $'import http.server, sys\nhandler = http.server.SimpleHTTPRequestHandler\nhandler.extensions_map = {k: v + ";charset=UTF-8" for k, v in handler.extensions_map.items()}\nhandler.extensions_map[""] = "text/plain;charset=UTF-8"\nhttp.server.test(HandlerClass=handler, port=int(sys.argv[1]))' "$port";
 }
 
 # Start a PHP server from a directory, optionally specifying the port
@@ -191,85 +280,85 @@ function tre() {
 	tree -aC -I '.git|node_modules|bower_components' --dirsfirst "$@" | less -FRNX;
 }
 
-# Git push and upload to remote host
+# Zip the current project and upload it to the host described in ./config.ini
+# (DESTUSERNAME, DESTHOSTNAME, DESTPATH and optionally DESTURL)
 function up() {
 	if [ -f config.ini ]; then
-	. config.ini
-	zip -r payload.zip . --exclude="*.git*" --exclude=*.DS_Store* --exclude=payload.zip --exclude=config.ini
-	scp payload.zip $DESTUSERNAME@$DESTHOSTNAME:$DESTPATH
-  rm payload.zip
-  ssh $DESTUSERNAME@$DESTHOSTNAME "unzip -o $DESTPATH/payload.zip -d $DESTPATH"
-	if ! [ -z ${DESTURL+x} ]; then open $DESTURL; fi
+		. config.ini
+		zip -r payload.zip . --exclude="*.git*" --exclude=*.DS_Store* --exclude=payload.zip --exclude=config.ini
+		scp payload.zip $DESTUSERNAME@$DESTHOSTNAME:$DESTPATH
+		rm payload.zip
+		ssh $DESTUSERNAME@$DESTHOSTNAME "unzip -o $DESTPATH/payload.zip -d $DESTPATH"
+		if ! [ -z ${DESTURL+x} ]; then open $DESTURL; fi
 	else
 		printf "Initialization file must first be created\r\n";
 	fi;
 }
 
-# Sync (keep backup) files from my web hosting server
-function sync() {
-	until rsync -vaP --delete me@hosting.com:/my/cloud/docroot/folder ~/Cloud; do
-	  echo Transfer disrupted, retrying in a second...
-	  sleep 1
-	done
+# Name of the network service (Wi-Fi, Ethernet, …) behind the currently active interface
+function _active_network_service() {
+	local iface
+	iface=$(ifconfig | pcre2grep -M -o '^[^\t:]+:([^\n]|\n\t)*status: active' | grep -Eo -m 1 '^[^\t:]+')
+	networksetup -listnetworkserviceorder | grep "${iface}" | awk -F "(, )|(: )|[)]" '{print $2}'
 }
 
-# Start Tor and switch the system-wide proxy settings in macOS
+# Start Tor and route the system-wide SOCKS proxy through it.
+# The port is read from Homebrew's torrc so the two can never disagree (default 9050).
 function starttor() {
-	# 'Wi-Fi' or 'Ethernet' or 'Display Ethernet'
-	INTERFACE=$(networksetup -listnetworkserviceorder | grep $(ifconfig | pcregrep -M -o '^[^\t:]+:([^\n]|\n\t)*status: active' | egrep -o -m 1 '^[^\t:]+') | awk -F  "(, )|(: )|[)]" '{print $2}')
+	local service port
+	service=$(_active_network_service)
+	port=$(grep -iE '^[[:space:]]*SocksPort' "$(brew --prefix)/etc/tor/torrc" 2>/dev/null | awk '{print $2}' | head -n 1)
+	port="${port:-9050}"
 
 	# Ask for the administrator password upfront
 	sudo -v
 	# Keep-alive: update existing `sudo` time stamp until finished
 	while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
-	sudo networksetup -setsocksfirewallproxy $INTERFACE 127.0.0.1 9050 off
-	sudo networksetup -setsocksfirewallproxystate $INTERFACE on
+	sudo networksetup -setsocksfirewallproxy "${service}" 127.0.0.1 "${port}" off
+	sudo networksetup -setsocksfirewallproxystate "${service}" on
 	echo "$(tput setaf 64)" # green
-	echo "SOCKS proxy 127.0.0.1:9050 enabled."
+	echo "SOCKS proxy 127.0.0.1:${port} enabled."
 	echo "$(tput setaf 136)" # orange
 	echo "Starting Tor..."
 	echo "$(tput sgr0)" # color reset
 	tor && stoptor
 }
 
+# Stop routing the system-wide SOCKS proxy through Tor
 function stoptor() {
-	sudo networksetup -setsocksfirewallproxystate $INTERFACE off
-	echo "$(tput setaf 64)" #green
+	local service
+	service=$(_active_network_service)
+	sudo networksetup -setsocksfirewallproxystate "${service}" off
+	echo "$(tput setaf 64)" # green
 	echo "SOCKS proxy disabled."
 	echo "$(tput sgr0)" # color reset
 }
 
-# Clone and set up a new instance of OctoberCMS
-function october() {
-	local target_dir="october"
-  if [ ! -z "${1}" ]; then
-    target_dir="${1}"
-  fi;
-  echo $target_dir
-	git clone -b develop https://github.com/octobercms/october $target_dir
-	cd $target_dir
-	pushd $(pwd) > /dev/null
-	composer install
-	git reset --hard origin/develop
-	valet link $target_dir
-	echo "Set application URL to http://$target_dir.$(valet tld)"
-	php artisan october:install
-}
-
-# Clone and set up a new instance of OctoberCMS from my forked repo
-function myoctober() {
-	local target_dir="october"
-  if [ ! -z "${1}" ]; then
-    target_dir="${1}"
-  fi;
-  echo $target_dir
-	git clone -b develop https://github.com/SaifurRahmanMohsin/october $target_dir
-	cd $target_dir
-	pushd $(pwd) > /dev/null
-	composer install
-	git reset --hard origin/develop
-	valet link $target_dir
-	echo "Set application URL to http://$target_dir.$(valet tld)"
-	php artisan october:install
+# Convert a Markdown file to rich text and copy it to the clipboard (paste into Apple Notes, Mail, …)
+function mdcopy() {
+	if [ -z "${1}" ]; then
+		echo "Usage: mdcopy file.md"
+		return 1
+	fi
+	if [ ! -f "${1}" ]; then
+		echo "File not found: ${1}"
+		return 1
+	fi
+	if ! command -v pandoc &> /dev/null; then
+		echo "pandoc is required. Install with: brew install pandoc"
+		return 1
+	fi
+	local tmp
+	tmp=$(mktemp -d) || return 1
+	# Straighten typographic dashes and quotes, then Markdown -> HTML -> RTF -> clipboard
+	sed -e 's/—/-/g' -e 's/[“”]/"/g' -e "s/[‘’]/'/g" "${1}" > "${tmp}/clean.md" \
+		&& pandoc "${tmp}/clean.md" -f markdown -t html --ascii -o "${tmp}/body.html" \
+		&& sed -i '' 's/<h2/<br><br><h2/g; s/<h3/<br><h3/g; s/<hr \/>/<br><br>/g' "${tmp}/body.html" \
+		&& { echo '<html><head><meta charset="utf-8"></head><body>'; cat "${tmp}/body.html"; echo '</body></html>'; } > "${tmp}/full.html" \
+		&& textutil -convert rtf -encoding UTF-8 "${tmp}/full.html" -output "${tmp}/out.rtf" \
+		&& osascript -e "set the clipboard to (read (POSIX file \"${tmp}/out.rtf\") as «class RTF »)" \
+		&& echo "Copied to clipboard as rich text. Cmd+V into Apple Notes." \
+		|| echo "Failed to convert."
+	rm -rf "${tmp}"
 }

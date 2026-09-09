@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 
-# Make vim the default editor.
-export EDITOR='vim';
+# Make Neovim the default editor, falling back to Vim on machines where it isn't installed yet.
+if command -v nvim > /dev/null 2>&1; then
+	export EDITOR='nvim';
+else
+	export EDITOR='vim';
+fi;
 
 # Enable persistent REPL history for `node`.
 export NODE_REPL_HISTORY=~/.node_history;
@@ -29,11 +33,12 @@ export LESS_TERMCAP_md="${yellow}";
 # Don’t clear the screen after quitting a manual page.
 export MANPAGER='less -X';
 
-# Always enable colored `grep` output.
-export GREP_OPTIONS='--color=auto';# Avoid issues with `gpg` as installed via Homebrew.
-
+# Avoid issues with `gpg` as installed via Homebrew.
 # https://stackoverflow.com/a/42265848/96656
 export GPG_TTY=$(tty);
 
 # Hide the “default interactive shell is now zsh” warning on macOS.
 export BASH_SILENCE_DEPRECATION_WARNING=1;
+
+# Where nvm keeps its Node versions (nvm itself is sourced from the shell profile).
+export NVM_DIR="$HOME/.nvm";
