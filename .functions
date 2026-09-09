@@ -104,6 +104,16 @@ function combine_php_files() {
 	_combine_files "php" "$@"
 }
 
+# Open the Claude Code + lazygit + shell layout (see .config/zellij/layouts/cockpit.kdl),
+# as a new tab when already inside Zellij
+function cockpit() {
+	if [ -n "${ZELLIJ}" ]; then
+		zellij action new-tab --layout cockpit --name "${PWD##*/}"
+	else
+		zellij --layout cockpit
+	fi
+}
+
 # Create a new directory and enter it
 function mkd() {
 	mkdir -p "$@" && cd "$_";
