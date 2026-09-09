@@ -1,18 +1,6 @@
-# Compiled Python files
-*.pyc
-
-# Folder view configuration files
+# Ignore rules for this repository only. The global excludes file is .gitignore_global.
 .DS_Store
-Desktop.ini
 
-# Thumbnail cache files
-._*
-Thumbs.db
-
-# Files that might appear on external disks
-.Spotlight-V100
-.Trashes
-
-# Re-include .claude/ in this repo (global ~/.gitignore excludes it)
+# ~/.gitignore_global hides .claude/ in every repo; this one versions a Claude Code skill.
 !.claude/
 !.claude/**
