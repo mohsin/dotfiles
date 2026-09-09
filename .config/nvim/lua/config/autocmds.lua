@@ -1,0 +1,1 @@
+-- Loaded on the VeryLazy event. LazyVim's defaults: https://www.lazyvim.org/configuration/general#auto-commands

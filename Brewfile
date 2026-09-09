@@ -21,6 +21,8 @@ brew "grep"
 brew "moreutils"           # sponge, ts, vipe and friends
 brew "screen"
 brew "tree"
+brew "ripgrep"             # grep behind the Neovim pickers
+brew "fd"                  # find behind the Neovim pickers
 brew "wget"
 brew "jq"
 brew "dos2unix"
