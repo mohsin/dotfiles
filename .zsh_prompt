@@ -1,0 +1,69 @@
+#!/usr/bin/env zsh
+
+# Shell prompt based on the Solarized Dark theme, ported from .bash_prompt.
+# Screenshot: http://i.imgur.com/EkEtphC.png
+# Heavily inspired by @necolas’s prompt: https://github.com/necolas/dotfiles
+
+setopt prompt_subst
+
+prompt_git() {
+	local s='' branchName=''
+
+	# Check if the current directory is in a Git repository.
+	git rev-parse --is-inside-work-tree &>/dev/null || return
+
+	# Get the short symbolic ref. If HEAD isn’t a symbolic ref, get a tracking
+	# remote branch or tag. Otherwise, get the short SHA for the latest commit, or give up.
+	branchName="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || \
+		git describe --all --exact-match HEAD 2>/dev/null || \
+		git rev-parse --short HEAD 2>/dev/null || \
+		echo '(unknown)')"
+
+	# Early exit for Chromium & Blink repo, as the dirty check takes too long.
+	if [[ "$(git config --get remote.origin.url)" == *chromium/src.git* ]]; then
+		s+='*'
+	else
+		# Uncommitted changes in the index.
+		git diff --quiet --ignore-submodules --cached || s+='+'
+		# Unstaged changes.
+		git diff-files --quiet --ignore-submodules -- || s+='!'
+		# Untracked files (stop at the first one; whole untracked directories count once).
+		[[ -n "$(git ls-files --others --exclude-standard --directory 2>/dev/null | head -n 1)" ]] && s+='?'
+		# Stashed files.
+		git rev-parse --verify refs/stash &>/dev/null && s+='$'
+	fi
+
+	[[ -n "${s}" ]] && s=" [${s}]"
+
+	print -n -- "${1}${branchName}${2}${s}"
+}
+
+# Solarized colours (256-colour indexes): orange 166, red 124, yellow 136, green 64,
+# violet 61, blue 33, white 15. Highlight the user name when root and the host over SSH.
+if [[ $EUID -eq 0 ]]; then
+	userStyle='%F{124}'
+else
+	userStyle='%F{166}'
+fi
+if [[ -n $SSH_TTY ]]; then
+	hostStyle='%B%F{124}'
+else
+	hostStyle='%F{136}'
+fi
+
+PROMPT=$'\n'                    # newline
+PROMPT+="${userStyle}%n"        # username
+PROMPT+='%F{15} at '
+PROMPT+="${hostStyle}%m%b"      # host
+PROMPT+='%F{15} in '
+PROMPT+='%F{64}%~'              # working directory, ~-abbreviated
+PROMPT+='$(prompt_git "%F{15} on %F{61}" "%F{33}")'   # Git repository details
+PROMPT+=$'\n'
+PROMPT+='%F{15}$ %f'            # `$` (and reset colour)
+PROMPT2='%F{136}→ %f'
+unset userStyle hostStyle
+
+# Show the working directory's base name in the terminal title.
+autoload -Uz add-zsh-hook
+prompt_set_title() { print -Pn '\e]0;%1~\a' }
+add-zsh-hook precmd prompt_set_title
