@@ -19,7 +19,7 @@
 	c = clone --recursive
 
 	# Commit all changes.
-	ca = !git add ':(exclude,attr:builtin_objectmode=160000)' && git commit -av
+	ca = !git add -A && git commit -av
 
 	# Switch to a branch, creating it if necessary.
 	go = "!f() { git checkout -b \"$1\" 2> /dev/null || git checkout \"$1\"; }; f"
@@ -99,6 +99,9 @@
 	# https://git-scm.com/docs/git-update-index#_untracked_cache
 	untrackedCache = true
 
+	# Convert CRLF to LF on commit, never touch line endings on checkout.
+	autocrlf = input
+
 [color]
 
 	# Use colors in Git commands that are capable of colored output when
@@ -134,14 +137,32 @@
 	# Detect copies as well as renames.
 	renames = copies
 
+	# Open `git difftool` in Meld.
+	tool = meld
+
 [diff "bin"]
 
 	# Use `hexdump` to diff binary files.
 	textconv = hexdump -v -C
 
-[diff "bin"]
-	# Use `hexdump` to diff binary files
-	textconv = hexdump -v -C
+[difftool]
+
+	prompt = false
+
+[difftool "meld"]
+
+	cmd = meld "$LOCAL" "$REMOTE"
+
+[filter "lfs"]
+
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+
+[gpg]
+
+	program = gpg
 
 [help]
 
@@ -152,6 +173,13 @@
 
 	# Include summaries of merged commits in newly created merge commit messages
 	log = true
+
+	# Resolve conflicts with `git mergetool` in Meld.
+	tool = meld
+
+[mergetool "meld"]
+
+	cmd = meld "$LOCAL" "$MERGED" "$REMOTE" --output "$MERGED"
 
 [push]
 
@@ -185,3 +213,9 @@
 [init]
 
 	defaultBranch = main
+
+# Machine-specific settings (user identity, signing key, send-email credentials,
+# credential-helper includes) live in ~/.gitconfig.local, which is never committed.
+[include]
+
+	path = ~/.gitconfig.local
