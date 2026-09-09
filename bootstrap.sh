@@ -112,7 +112,22 @@ if [ -e "$ghostty_local" ] && [ ! -L "$ghostty_local" ]; then
 	backup "$ghostty_local"
 fi
 
-# 6. Private git settings that the repository never contains
+# 6. Launch agents shipped in init/ (copied, not linked: launchd is happier with real files)
+for src in "$DOTFILES"/init/*.plist; do
+	[ -e "$src" ] || continue
+	label="$(basename "$src" .plist)"
+	dst="$HOME/Library/LaunchAgents/$label.plist"
+	if [ -e "$dst" ] && cmp -s "$src" "$dst"; then
+		continue
+	fi
+	echo "  agent:  $label"
+	run mkdir -p "$HOME/Library/LaunchAgents"
+	run cp "$src" "$dst"
+	run launchctl bootout "gui/$(id -u)/$label" 2> /dev/null || true
+	run launchctl bootstrap "gui/$(id -u)" "$dst"
+done
+
+# 7. Private git settings that the repository never contains
 if [ ! -f "$HOME/.gitconfig.local" ]; then
 	echo "  create: ~/.gitconfig.local (fill in your identity and signing key)"
 	if (( ! DRY_RUN )); then
@@ -129,7 +144,7 @@ LOCAL
 	fi
 fi
 
-# 7. The completion cache was built against the old fpath; rebuild it on the next shell start
+# 8. The completion cache was built against the old fpath; rebuild it on the next shell start
 echo "  reset:  ~/.zcompdump (completion cache)"
 run rm -f "$HOME"/.zcompdump*
 

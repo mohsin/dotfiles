@@ -5,7 +5,8 @@ gui:
   showFileTree: true
 git:
   autoFetch: true
-  paging:
-    colorArg: always
+  diffRenderers:
+    - colorArg: always
+      type: rawGit
 os:
   editPreset: nvim
