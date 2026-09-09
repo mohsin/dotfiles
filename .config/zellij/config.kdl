@@ -1,0 +1,26 @@
+// Zellij configuration. Starts locked so every Ctrl+key reaches the program in the
+// pane (Claude Code, nvim, lazygit). Ctrl g unlocks; then p (pane), t (tab),
+// n (resize), h (move), s (scroll), o (session), q (quit). Check with `zellij setup --check`.
+
+default_mode "locked"
+theme "solarized-dark"
+mouse_mode true
+copy_on_select true
+scroll_buffer_size 50000
+pane_frames true
+show_startup_tips false
+show_release_notes false
+
+keybinds {
+    normal {
+        // Ctrl g, then g: lazygit as a floating pane over the current directory; q closes it
+        bind "g" {
+            Run "lazygit" {
+                floating true
+                close_on_exit true
+                name "lazygit"
+            }
+            SwitchToMode "locked"
+        }
+    }
+}

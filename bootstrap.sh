@@ -104,6 +104,14 @@ if [ -e "$HOME/.gitignore" ] || [ -L "$HOME/.gitignore" ]; then
 	backup "$HOME/.gitignore"
 fi
 
+# Ghostty also reads ~/Library/Application Support/com.mitchellh.ghostty/config, and that copy
+# wins over ~/.config/ghostty/config, so move a leftover one out of the way.
+ghostty_local="$HOME/Library/Application Support/com.mitchellh.ghostty/config"
+if [ -e "$ghostty_local" ] && [ ! -L "$ghostty_local" ]; then
+	echo "  retire: ~/Library/Application Support/com.mitchellh.ghostty/config (superseded by ~/.config/ghostty/config)"
+	backup "$ghostty_local"
+fi
+
 # 6. Private git settings that the repository never contains
 if [ ! -f "$HOME/.gitconfig.local" ]; then
 	echo "  create: ~/.gitconfig.local (fill in your identity and signing key)"

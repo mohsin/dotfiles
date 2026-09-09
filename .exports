@@ -34,6 +34,11 @@ export DOTNET_ROOT="$HOME/.dotnet";
 # Where nvm keeps its Node versions (nvm itself is loaded by the shell rc, lazily in zsh).
 export NVM_DIR="$HOME/.nvm";
 
+# Keep every tool's config under ~/.config, where bootstrap.sh links it. macOS tools such as
+# lazygit and Zellij would otherwise default to ~/Library/Application Support.
+export XDG_CONFIG_HOME="$HOME/.config";
+export ZELLIJ_CONFIG_DIR="$XDG_CONFIG_HOME/zellij";
+
 # Make Neovim the default editor, falling back to Vim on machines where it isn't installed yet.
 if command -v nvim > /dev/null 2>&1; then
 	export EDITOR='nvim';

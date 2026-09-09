@@ -1,0 +1,22 @@
+// Claude Code on the left, lazygit and a shell stacked on the right.
+// Open with the `cockpit` shell function (a new tab when already inside Zellij).
+layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        children
+        pane size=2 borderless=true {
+            plugin location="zellij:status-bar"
+        }
+    }
+    tab name="cockpit" focus=true {
+        pane split_direction="vertical" {
+            pane name="claude" size="60%" focus=true command="claude"
+            pane split_direction="horizontal" {
+                pane name="lazygit" command="lazygit"
+                pane name="shell"
+            }
+        }
+    }
+}
