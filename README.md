@@ -8,33 +8,27 @@ This fork of [Mathias Bynens dotfiles](https://github.com/mathiasbynens/dotfiles
 
 ### Using Git and the bootstrap script
 
-You can clone the repository wherever you want. (I like to keep it in `~/Projects/dotfiles`, with `~/dotfiles` as a symlink.) The bootstrapper script will pull in the latest version and copy the files to your home folder.
+Clone the repository wherever you like. The bootstrapper symlinks every dotfile into your home
+directory, so editing `~/.zshrc` edits the repository and nothing can drift. Anything already in
+the way is moved to `~/.dotfiles-backup/<timestamp>/` first.
 
 ```bash
-git clone https://github.com/SaifurRahmanMohsin/dotfiles.git && cd dotfiles && source bootstrap.sh
+git clone git@github.com:mohsin/dotfiles.git && cd dotfiles && ./bootstrap.sh
 ```
 
-To update, `cd` into your local `dotfiles` repository and then:
+To update, `cd` into your local `dotfiles` repository and run it again. It pulls the latest
+version, links anything new, and skips what is already linked:
 
 ```bash
-source bootstrap.sh
+./bootstrap.sh
 ```
 
-Alternatively, to update while avoiding the confirmation prompt:
+Pass `-f` to skip the confirmation prompt, or `-n` to see what would change without touching
+anything.
 
-```bash
-set -- -f; source bootstrap.sh
-```
-
-### Git-free install
-
-To install these dotfiles without Git:
-
-```bash
-cd; curl -#L https://github.com/SaifurRahmanMohsin/dotfiles/tarball/master | tar -xzv --strip-components 1 --exclude={README.md,bootstrap.sh,.osx,LICENSE-MIT.txt}
-```
-
-To update later on, just run that command again.
+Private git settings (your name, email, signing key, send-email credentials) live in
+`~/.gitconfig.local`, which `.gitconfig` includes and which is never committed. The bootstrapper
+creates an empty template if the file does not exist.
 
 ### Specify the `$PATH`
 

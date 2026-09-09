@@ -78,8 +78,8 @@
 
 [core]
 
-	# Use custom `.gitignore` and `.gitattributes`.
-	excludesfile = ~/.gitignore
+	# Use custom global `.gitignore` and `.gitattributes`.
+	excludesfile = ~/.gitignore_global
 	attributesfile = ~/.gitattributes
 
 	# Treat spaces before tabs and all kinds of trailing whitespace as an error.

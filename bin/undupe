@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+# Move images that are near-duplicates (ImageMagick RMSE) of another file in a folder into <folder>/dups
 require 'open3'
 require 'fileutils'
 
@@ -40,7 +42,7 @@ files.each do |file_1|
       puts "#{file_2} is probably a dup of #{file_1}"
       puts "Moving #{file_2}"
       destination = File.dirname(file_2) + "/dups/" + File.basename(file_2)
-      FileUtils.mv(file_2, destination)      
+      FileUtils.mv(file_2, destination)
     end
     complete = (iteration += 1 / total_iterations) * 100.00
     printf("%.5f \n", complete)
