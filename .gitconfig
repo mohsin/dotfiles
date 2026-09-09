@@ -102,6 +102,9 @@
 	# Convert CRLF to LF on commit, never touch line endings on checkout.
 	autocrlf = input
 
+	# Write commit messages and rebase todo lists in Zed; everything else uses $EDITOR.
+	editor = zed --wait
+
 [color]
 
 	# Use colors in Git commands that are capable of colored output when

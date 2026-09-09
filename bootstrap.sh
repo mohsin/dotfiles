@@ -90,15 +90,40 @@ for dir in colors syntax; do
 done
 run mkdir -p "$HOME/.vim/backups" "$HOME/.vim/swaps" "$HOME/.vim/undo"
 
-# 4. ~/.config/<app>: one link per application directory
+# 4. ~/.config/<app>: one link per application directory, unless the directory carries a
+#    .link-files marker, meaning the app keeps generated files next to its config: then
+#    each versioned file is linked on its own and the app's directory stays real.
 if [ -d "$DOTFILES/.config" ]; then
 	for src in "$DOTFILES"/.config/*/; do
 		src="${src%/}"
-		link "$src" "$HOME/.config/$(basename "$src")"
+		app="$(basename "$src")"
+		if [ -e "$src/.link-files" ]; then
+			for file in "$src"/*; do
+				link "$file" "$HOME/.config/$app/$(basename "$file")"
+			done
+		else
+			link "$src" "$HOME/.config/$app"
+		fi
 	done
 fi
 
-# 5. Files this layout supersedes
+# 5. Links into the repository whose target was removed (a retired script or config)
+for dir in "$HOME" "$HOME/bin" "$HOME/.config"/* "$HOME/.claude" "$HOME/.claude/skills" "$HOME/.vim"; do
+	[ -d "$dir" ] || continue
+	for lnk in "$dir"/.[!.]* "$dir"/*; do
+		[ -L "$lnk" ] || continue
+		case "$(readlink "$lnk")" in
+			"$DOTFILES"/*)
+				if [ ! -e "$lnk" ]; then
+					echo "  prune:  $lnk (its file left the repository)"
+					run rm "$lnk"
+				fi
+				;;
+		esac
+	done
+done
+
+# 6. Files this layout supersedes
 if [ -e "$HOME/.gitignore" ] || [ -L "$HOME/.gitignore" ]; then
 	echo "  retire: ~/.gitignore (the global excludes file is now ~/.gitignore_global)"
 	backup "$HOME/.gitignore"
@@ -112,7 +137,7 @@ if [ -e "$ghostty_local" ] && [ ! -L "$ghostty_local" ]; then
 	backup "$ghostty_local"
 fi
 
-# 6. Claude Code: ~/.claude also holds sessions, caches and plugins, so link item by item.
+# 7. Claude Code: ~/.claude also holds sessions, caches and plugins, so link item by item.
 #    Top-level files link directly; each entry inside hooks/, agents/ and skills/ links into
 #    the matching folder, leaving anything local-only (such as branded skills) untouched.
 for src in "$DOTFILES"/claude/*; do
@@ -126,7 +151,7 @@ for src in "$DOTFILES"/claude/*; do
 	fi
 done
 
-# 7. Launch agents shipped in init/ (copied, not linked: launchd is happier with real files)
+# 8. Launch agents shipped in init/ (copied, not linked: launchd is happier with real files)
 for src in "$DOTFILES"/init/*.plist; do
 	[ -e "$src" ] || continue
 	label="$(basename "$src" .plist)"
@@ -141,7 +166,7 @@ for src in "$DOTFILES"/init/*.plist; do
 	run launchctl bootstrap "gui/$(id -u)" "$dst"
 done
 
-# 8. Private git settings that the repository never contains
+# 9. Private git settings that the repository never contains
 if [ ! -f "$HOME/.gitconfig.local" ]; then
 	echo "  create: ~/.gitconfig.local (fill in your identity and signing key)"
 	if (( ! DRY_RUN )); then
@@ -167,7 +192,7 @@ if [ ! -f "$HOME/.claude/CLAUDE.local.md" ]; then
 	fi
 fi
 
-# 9. The completion cache was built against the old fpath; rebuild it on the next shell start
+# 10. The completion cache was built against the old fpath; rebuild it on the next shell start
 echo "  reset:  ~/.zcompdump (completion cache)"
 run rm -f "$HOME"/.zcompdump*
 

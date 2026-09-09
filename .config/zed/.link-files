@@ -1,0 +1,1 @@
+# Zed keeps generated files next to its config, so bootstrap.sh links these files one by one.
