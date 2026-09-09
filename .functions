@@ -107,6 +107,10 @@ function combine_php_files() {
 # Open the Claude Code + lazygit + shell layout (see .config/zellij/layouts/cockpit.kdl),
 # as a new tab when already inside Zellij
 function cockpit() {
+	if [ ! -t 0 ]; then
+		echo "cockpit needs an interactive terminal (run it in Ghostty, not through a tool)"
+		return 1
+	fi
 	if [ -n "${ZELLIJ}" ]; then
 		zellij action new-tab --layout cockpit --name "${PWD##*/}"
 	else
