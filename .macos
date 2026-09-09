@@ -691,6 +691,25 @@ defaults write com.googlecode.iterm2 PromptOnQuit -bool false
 sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.locate.plist
 
 ###############################################################################
+# Ghostty                                                                     #
+###############################################################################
+
+# Ghostty launches hidden at login through the launch agent that bootstrap.sh installs
+# from init/, so neither it nor iTerm (which it replaces) needs a login item.
+# The Option+Space global hotkey also needs Ghostty added under
+# System Settings > Privacy & Security > Accessibility, which macOS will not script.
+osascript <<EOD
+tell application "System Events"
+	if exists login item "Ghostty" then
+		delete login item "Ghostty"
+	end if
+	if exists login item "iTerm" then
+		delete login item "iTerm"
+	end if
+end tell
+EOD
+
+###############################################################################
 # Time Machine                                                                #
 ###############################################################################
 

@@ -10,17 +10,32 @@ font-thicken = true
 theme = Solarized Dark Patched
 window-theme = auto
 
-# --- Window ---
+# --- Window: the iTerm hotkey window, rebuilt with a normal tabbed window ---
+# New windows open at the top of the screen, full width (a width larger than the
+# screen is clamped to it) and 25 rows tall. window-save-state then remembers the
+# shape, tabs and working directories across restarts.
+window-position-x = 0
+window-position-y = 0
+window-width = 999
+window-height = 25
 window-save-state = always
 window-padding-x = 8
 window-padding-y = 8
 window-padding-balance = true
 working-directory = ~/Desktop
 
-# --- Quick terminal: the iTerm hotkey window, on the same Option+Space ---
-# A global keybind needs Accessibility permission for Ghostty
-# (System Settings > Privacy & Security > Accessibility).
-keybind = global:alt+space=toggle_quick_terminal
+# --- Startup ---
+# Ghostty is launched hidden at login by the launch agent in init/ (`open -jg`), so its
+# initial window exists but stays out of sight until Option+Space, and the app keeps
+# running when the last window is closed (Cmd+N makes a new one).
+quit-after-last-window-closed = false
+
+# --- Global hotkeys (need Accessibility permission for Ghostty in System Settings) ---
+# Option+Space shows or hides every Ghostty window, tabs included; press it again to
+# hide. Ghostty's quick terminal cannot have tabs on macOS (they need a title bar), so it
+# is only on Option+Shift+Space for a one-off command.
+keybind = global:alt+space=toggle_visibility
+keybind = global:alt+shift+space=toggle_quick_terminal
 quick-terminal-position = top
 quick-terminal-screen = mouse
 quick-terminal-autohide = true
