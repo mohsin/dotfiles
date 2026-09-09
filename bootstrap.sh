@@ -112,7 +112,21 @@ if [ -e "$ghostty_local" ] && [ ! -L "$ghostty_local" ]; then
 	backup "$ghostty_local"
 fi
 
-# 6. Launch agents shipped in init/ (copied, not linked: launchd is happier with real files)
+# 6. Claude Code: ~/.claude also holds sessions, caches and plugins, so link item by item.
+#    Top-level files link directly; each entry inside hooks/, agents/ and skills/ links into
+#    the matching folder, leaving anything local-only (such as branded skills) untouched.
+for src in "$DOTFILES"/claude/*; do
+	name="$(basename "$src")"
+	if [ -d "$src" ]; then
+		for child in "$src"/*; do
+			link "$child" "$HOME/.claude/$name/$(basename "$child")"
+		done
+	else
+		link "$src" "$HOME/.claude/$name"
+	fi
+done
+
+# 7. Launch agents shipped in init/ (copied, not linked: launchd is happier with real files)
 for src in "$DOTFILES"/init/*.plist; do
 	[ -e "$src" ] || continue
 	label="$(basename "$src" .plist)"
@@ -127,7 +141,7 @@ for src in "$DOTFILES"/init/*.plist; do
 	run launchctl bootstrap "gui/$(id -u)" "$dst"
 done
 
-# 7. Private git settings that the repository never contains
+# 8. Private git settings that the repository never contains
 if [ ! -f "$HOME/.gitconfig.local" ]; then
 	echo "  create: ~/.gitconfig.local (fill in your identity and signing key)"
 	if (( ! DRY_RUN )); then
@@ -144,7 +158,16 @@ LOCAL
 	fi
 fi
 
-# 8. The completion cache was built against the old fpath; rebuild it on the next shell start
+# Private Claude Code instructions, imported by claude/CLAUDE.md
+if [ ! -f "$HOME/.claude/CLAUDE.local.md" ]; then
+	echo "  create: ~/.claude/CLAUDE.local.md (private instructions imported by CLAUDE.md)"
+	if (( ! DRY_RUN )); then
+		mkdir -p "$HOME/.claude"
+		printf '# Local Instructions\n\nPrivate or machine-specific instructions for Claude Code. Imported by ~/.claude/CLAUDE.md, never committed.\n' > "$HOME/.claude/CLAUDE.local.md"
+	fi
+fi
+
+# 9. The completion cache was built against the old fpath; rebuild it on the next shell start
 echo "  reset:  ~/.zcompdump (completion cache)"
 run rm -f "$HOME"/.zcompdump*
 

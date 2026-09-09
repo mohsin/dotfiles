@@ -1,6 +1,3 @@
 # Ignore rules for this repository only. The global excludes file is .gitignore_global.
 .DS_Store
 
-# ~/.gitignore_global hides .claude/ in every repo; this one versions a Claude Code skill.
-!.claude/
-!.claude/**
