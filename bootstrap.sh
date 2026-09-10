@@ -25,7 +25,7 @@ done
 
 # Top-level entries that stay in the repository instead of being linked into $HOME:
 # repo metadata, scripts you run from here, and directories that get special handling below.
-SKIP=(.git .gitignore .DS_Store .editorconfig .macos .osx .claude .config .vim)
+SKIP=(.git .gitignore .DS_Store .editorconfig .macos .config .vim)
 
 # Execute a command, or do nothing on a dry run (the callers already describe each change).
 run() {
