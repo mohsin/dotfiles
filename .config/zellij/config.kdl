@@ -6,7 +6,10 @@
 default_mode "locked"
 theme "solarized-dark"
 mouse_mode true
+// A plain drag inside a pane is Zellij's own selection: it stays in the pane, joins wrapped
+// lines, and lands on the clipboard on release. Shift+drag hands the mouse to Ghostty instead.
 copy_on_select true
+copy_command "pbcopy"
 scroll_buffer_size 50000
 pane_frames true
 show_startup_tips false
