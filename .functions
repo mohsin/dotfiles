@@ -105,17 +105,91 @@ function combine_php_files() {
 }
 
 # Open the Claude Code + lazygit + shell layout (see .config/zellij/layouts/cockpit.kdl),
-# as a new tab when already inside Zellij
+# as a new tab when already inside Zellij. Claude runs in the current directory; lazygit and
+# the shell run in the git repository: this directory, the one given with -p, or one picked
+# from Projects/ when started from a client folder.
+#   cockpit               start a new Claude session
+#   cockpit -c            continue the most recent Claude session of this directory
+#   cockpit -r [id]       pick a past session of this directory, or resume the given one
+#   cockpit -p <repo>     repository for lazygit and the shell
 function cockpit() {
 	if [ ! -t 0 ]; then
 		echo "cockpit needs an interactive terminal (run it in Ghostty, not through a tool)"
 		return 1
 	fi
-	if [ -n "${ZELLIJ}" ]; then
-		zellij action new-tab --layout cockpit --name "${PWD##*/}"
-	else
-		zellij --layout cockpit
+	local args="" project=""
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			-c|--continue) args='args "--continue"' ;;
+			-r|--resume)
+				args='args "--resume"'
+				if [ -n "${2:-}" ] && [ "${2#-}" = "${2}" ]; then
+					args="args \"--resume\" \"${2}\""
+					shift
+				fi
+				;;
+			-p|--project)
+				if [ -z "${2:-}" ]; then
+					echo "cockpit: -p needs a repository path"
+					return 1
+				fi
+				project="${2}"
+				shift
+				;;
+			*) echo "Usage: cockpit [-c|--continue] [-r|--resume [session-id]] [-p|--project <repo>]"; return 1 ;;
+		esac
+		shift
+	done
+
+	if [ -z "${project}" ]; then
+		if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+			project="."
+		else
+			[ -n "${ZSH_VERSION}" ] && setopt local_options null_glob
+			local candidates=() dir choice i
+			for dir in Projects/*/ */; do
+				[ -d "${dir}.git" ] && candidates+=("${dir%/}")
+			done
+			case "${#candidates[@]}" in
+				0) echo "cockpit: no git repository here or under Projects/; use -p <repo>"; return 1 ;;
+				1) project="${candidates[@]}" ;;
+				*)
+					echo "Repository for lazygit and the shell:"
+					i=1
+					for dir in "${candidates[@]}"; do
+						echo "  ${i}) ${dir}"
+						i=$((i + 1))
+					done
+					printf "> "
+					read -r choice
+					if ! [ "${choice}" -ge 1 ] 2> /dev/null || [ "${choice}" -gt "${#candidates[@]}" ]; then
+						echo "cockpit: no repository chosen"
+						return 1
+					fi
+					project="${candidates[@]:$((choice - 1)):1}"
+					;;
+			esac
+		fi
 	fi
+	project="$(cd "${project}" 2> /dev/null && pwd)" || { echo "cockpit: no such directory: ${project}"; return 1; }
+
+	# Zellij layouts take no arguments, so build one from the template with the Claude flags
+	# and the working directories filled in
+	local template="${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/layouts/cockpit.kdl"
+	local layout
+	layout="$(mktemp -t cockpit).kdl" || return 1
+	awk -v args="${args}" -v here="${PWD}" -v repo="${project}" '
+		/COCKPIT_ARGS/ { if (args != "") { sub(/\/\/.*/, args) } else { next } }
+		/name="claude"/ { sub(/ \{$/, " cwd=\"" here "\" {") }
+		/name="lazygit"/ || /name="shell"/ { $0 = $0 " cwd=\"" repo "\"" }
+		{ print }
+	' "${template}" > "${layout}"
+	if [ -n "${ZELLIJ}" ]; then
+		zellij action new-tab --layout "${layout}" --name "${project##*/}"
+	else
+		zellij --layout "${layout}"
+	fi
+	rm -f "${layout}"
 }
 
 # Create a new directory and enter it

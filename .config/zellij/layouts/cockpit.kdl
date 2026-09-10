@@ -1,5 +1,7 @@
 // Claude Code on the left, lazygit and a shell stacked on the right.
 // Open with the `cockpit` shell function (a new tab when already inside Zellij).
+// The Claude and lazygit panes close when their program exits; `exit` closes the shell,
+// and the session ends with its last pane.
 layout {
     default_tab_template {
         pane size=1 borderless=true {
@@ -12,9 +14,11 @@ layout {
     }
     tab name="cockpit" focus=true {
         pane split_direction="vertical" {
-            pane name="claude" size="60%" focus=true command="claude"
+            pane name="claude" size="60%" focus=true command="claude" close_on_exit=true {
+                // COCKPIT_ARGS: the cockpit function swaps this line for `args "--continue"` or `args "--resume"`
+            }
             pane split_direction="horizontal" {
-                pane name="lazygit" command="lazygit"
+                pane name="lazygit" command="lazygit" close_on_exit=true
                 pane name="shell"
             }
         }
