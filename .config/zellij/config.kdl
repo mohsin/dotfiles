@@ -1,6 +1,7 @@
 // Zellij configuration. Starts locked so every Ctrl+key reaches the program in the
-// pane (Claude Code, nvim, lazygit). Ctrl g unlocks; then p (pane), t (tab),
-// n (resize), h (move), s (scroll), o (session), q (quit). Check with `zellij setup --check`.
+// pane (Claude Code, nvim, lazygit). Ctrl g unlocks; then Ctrl p (pane), Ctrl t (tab),
+// Ctrl n (resize), Ctrl h (move), Ctrl s (scroll), Ctrl o (session), Ctrl q (quit),
+// and Ctrl g again locks. Check with `zellij setup --check`.
 
 default_mode "locked"
 theme "solarized-dark"
@@ -12,7 +13,16 @@ show_startup_tips false
 show_release_notes false
 
 keybinds {
+    locked {
+        // Only Ctrl g unlocks; the stock Ctrl n binding would steal Neovim's completion key
+        unbind "Ctrl n"
+    }
     normal {
+        // Ctrl g, then f: the focused pane fills the tab; the same keys bring the layout back
+        bind "f" {
+            ToggleFocusFullscreen
+            SwitchToMode "locked"
+        }
         // Ctrl g, then g: lazygit as a floating pane over the current directory; q closes it
         bind "g" {
             Run "lazygit" {
