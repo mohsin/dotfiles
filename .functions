@@ -180,16 +180,30 @@ function cockpit() {
 	layout="$(mktemp -t cockpit).kdl" || return 1
 	awk -v args="${args}" -v here="${PWD}" -v repo="${project}" '
 		/COCKPIT_ARGS/ { if (args != "") { sub(/\/\/.*/, args) } else { next } }
-		/name="claude"/ { sub(/ \{$/, " cwd=\"" here "\" {") }
+		/command="claude"/ { sub(/ \{$/, " cwd=\"" here "\" {") }
 		/name="lazygit"/ || /name="shell"/ { $0 = $0 " cwd=\"" repo "\"" }
 		{ print }
 	' "${template}" > "${layout}"
+	# The session is named after the repository, so the terminal tab reads "repo | title".
+	# A running session of that name is reattached rather than duplicated.
+	local session="${project##*/}" state
 	if [ -n "${ZELLIJ}" ]; then
-		zellij action new-tab --layout "${layout}" --name "${project##*/}"
+		zellij action new-tab --layout "${layout}" --name "${session}"
 	else
-		zellij --layout "${layout}"
+		state="$(zellij list-sessions --no-formatting 2> /dev/null \
+			| awk -v s="${session}" '$1 == s { print (index($0, "EXITED") ? "exited" : "running"); exit }')"
+		if [ "${state}" = "running" ]; then
+			echo "cockpit: attaching to the running '${session}' session"
+			zellij attach "${session}"
+		else
+			# A dead session still holds its name, so release it before reusing the name
+			[ "${state}" = "exited" ] && zellij delete-session "${session}" --force > /dev/null 2>&1
+			# -n starts a new session; -l would try to add the layout to an existing
+			# session of that name and fail with "Session not found" when there is none
+			zellij --session "${session}" --new-session-with-layout "${layout}"
+		fi
 	fi
-	rm -f "${layout}"
+	rm -f "${layout}" "${layout%.kdl}"
 }
 
 # Create a new directory and enter it
