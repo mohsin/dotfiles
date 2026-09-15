@@ -5,13 +5,15 @@
 // and the session ends with its last pane.
 layout {
     default_tab_template {
+        // compact-bar carries the session name, the current mode and the tabs in one row.
+        // The two-row status bar is deliberately absent: it sat flush against the last line
+        // of the pane above it, clipping text, and Zellij renders extra rows below the bar
+        // rather than above, so it cannot be padded. Ctrl g still unlocks; the key hints it
+        // used to show are in the README.
         pane size=1 borderless=true {
-            plugin location="zellij:tab-bar"
+            plugin location="zellij:compact-bar"
         }
         children
-        pane size=2 borderless=true {
-            plugin location="zellij:status-bar"
-        }
     }
     tab name="cockpit" focus=true {
         pane split_direction="vertical" {
