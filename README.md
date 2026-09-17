@@ -63,6 +63,8 @@ they do not exist:
 - `~/.gitconfig.local`: your name, email, signing key and send-email credentials, included
   by `.gitconfig`.
 - `~/.claude/CLAUDE.local.md`: private Claude Code instructions, imported by `CLAUDE.md`.
+- `~/.Brewfile.local`: client and project specific packages, installed by `brew.sh` after the
+  main `Brewfile`.
 
 Two more are sourced by the shell if present, and never created:
 

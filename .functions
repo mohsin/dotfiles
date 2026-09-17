@@ -104,6 +104,35 @@ function combine_php_files() {
 	_combine_files "php" "$@"
 }
 
+# A Zellij session name for a repository: its own directory name, prefixed with the nearest
+# meaningful parent so that ten different "web" checkouts do not all answer to one session.
+# ~/Work/Client/acme/Projects/web -> acme-web, ~/Desktop/dotfiles -> dotfiles.
+function _cockpit_session_name() {
+	local repo="${1%/}" base parent name
+	base="${repo##*/}"
+	parent="${repo%/*}"
+	# Walk past the container directories that say nothing about which project this is
+	while [ -n "${parent}" ] && [ "${parent}" != "/" ] && [ "${parent}" != "${HOME}" ]; do
+		case "${parent##*/}" in
+			Projects|projects|Work|work|Client|Clients|clients|src|repos|code|dev|Desktop|Documents|Sites)
+				parent="${parent%/*}"
+				continue
+				;;
+		esac
+		break
+	done
+	name="${parent##*/}"
+	if [ -z "${name}" ] || [ "${parent}" = "${HOME}" ] || [ "${parent}" = "/" ]; then
+		name="${base}"
+	elif [ "$(printf '%s' "${name}" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "${base}" | tr '[:upper:]' '[:lower:]')" ]; then
+		name="${base}"
+	else
+		name="${name}-${base}"
+	fi
+	# Zellij session names travel through shell words and a terminal title, so keep them plain
+	printf '%s' "${name}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//; s/-*$//'
+}
+
 # Open the Claude Code + lazygit + shell layout (see .config/zellij/layouts/cockpit.kdl),
 # as a new tab when already inside Zellij. Claude runs in the current directory; lazygit and
 # the shell run in the git repository: this directory, the one given with -p, or one picked
@@ -186,7 +215,8 @@ function cockpit() {
 	' "${template}" > "${layout}"
 	# The session is named after the repository, so the terminal tab reads "repo | title".
 	# A running session of that name is reattached rather than duplicated.
-	local session="${project##*/}" state
+	local session state
+	session="$(_cockpit_session_name "${project}")"
 	if [ -n "${ZELLIJ}" ]; then
 		zellij action new-tab --layout "${layout}" --name "${session}"
 	else

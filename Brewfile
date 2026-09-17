@@ -3,6 +3,8 @@
 # a raw dump to compare against with `brew bundle dump --file=/tmp/Brewfile`.
 #
 # Only tools that get used directly are listed; libraries arrive as dependencies.
+# Client and project specific packages belong in ~/.Brewfile.local, which brew.sh installs
+# afterwards and which is never committed.
 
 # Third-party taps. Homebrew 6 ignores their formulae until trusted, hence `trusted: true`.
 tap "shivammathur/php"          # PHP 7.x builds that homebrew/core no longer ships

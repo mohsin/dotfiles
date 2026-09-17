@@ -13,5 +13,11 @@ fi
 brew update
 brew bundle install --file="$(dirname "${BASH_SOURCE[0]}")/Brewfile"
 
+# Client and project specific packages, kept out of this repository
+if [ -f "$HOME/.Brewfile.local" ]; then
+	echo "Installing from ~/.Brewfile.local"
+	brew bundle install --file="$HOME/.Brewfile.local"
+fi
+
 # Remove outdated versions from the cellar.
 brew cleanup
