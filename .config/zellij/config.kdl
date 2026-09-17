@@ -12,6 +12,10 @@ copy_on_select true
 copy_command "pbcopy"
 scroll_buffer_size 50000
 pane_frames true
+// Keep the cockpit layout put. With this on (Zellij's default) resizing a pane past a
+// threshold collapses the others into a stack, so a stray key in resize mode silently
+// rearranges the workspace instead of just nudging a border.
+stacked_resize false
 show_startup_tips false
 show_release_notes false
 
