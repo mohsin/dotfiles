@@ -18,8 +18,8 @@ Shared state for one highlight. `project.py init` creates it; each sub-skill fil
   ],
   "xfade": 0.03, "fade_in": 0.5, "tail_fade": 1.2, "loudnorm": -14
  },
- "title": {"text": "Singapore", "font": "fonts/DTGetaiGroteskDisplay-Black.ttf", "width": 720,
-           "condense": 0.8, "bulge": 0.35, "cy": 1180, "shadow": 170, "until": 3.3, "fade": 0.8},
+ "title": {"text": "Singapore", "font": "fonts/DTGetaiGroteskDisplay-Black.ttf", "width": 880,
+           "condense": 0.72, "bulge": 0.6, "arch": -0.25, "cy": 1170, "shadow": 200, "until": 3.3, "fade": 0.8},
  "captions": [
   {"tag": "concert", "lines": [
    {"text": "The Weeknd", "font": "fonts/OpenSans-Bold.ttf", "size": 104, "dy": 0},

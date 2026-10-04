@@ -50,10 +50,12 @@ street scenes.
   (see highlight-cover).
 - **Typeface:** one that captures the place, preferably from a local foundry under an open
   licence (Singapore: DT Getai Grotesk by Death of Typography). Not a generic sans.
-- **Approved default ("subtle low"):** mixed case, width 720 of 1080, condense 0.8, bulge
-  0.35, centred at y 1180, shadow 170. The landmark and sky stay visible above the word.
+- **Approved default (`bulge_smile`):** mixed case, width 880 of 1080, condense 0.72, bulge
+  0.6, arch -0.25 (sags into a smile), centred at y 1170, shadow 200. Big enough to match the
+  rest of the highlights row; the landmark and sunset sit above the curve.
 - **Timing:** fully visible to 2.5 s, fades out by 3.3 s.
-- **Always render variants and let the user choose** before it goes into the reel.
+- **Always render variants, mock them into a screenshot of the user's highlights row, and
+  let the user choose** before it goes into the reel.
 
 ## Captions
 

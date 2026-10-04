@@ -9,9 +9,14 @@
   uv run cover.py ... --only lowered,subtle_low       # a subset of presets
   uv run cover.py ... --variant '{"name":"mine","width":760,"bulge":0.3,"cy":1150}'
 
-Presets mirror the decisions in SKILL.md: centred, lowered, subtle_low, zoomed_in, behind.
-Writes <out>/<name>.png (1080x1920) and <out>/compare.jpg (full frame + circles at
-profile sizes) so the user can choose before anything goes into the reel.
+  uv run cover.py ... --row profile.png --slot 240,1190,151
+      also mocks each variant into a screenshot of the user's profile, in the highlight
+      slot centred at (x, y) with diameter d (measure it from the screenshot)
+
+Presets: bulge_smile (default), smile, caps_smile, bulge_arch, caps_arched, subtle_low.
+Writes <out>/<name>.png (1080x1920), <out>/<name>_inrow.png with --row, and
+<out>/compare.jpg (cover + in-row mock, or cover + circles) so the user can choose before
+anything goes into the reel.
 """
 import argparse, json, os, subprocess, sys, tempfile
 from pathlib import Path
@@ -22,11 +27,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from textfx import W, H, circle, compose, sky_mask, text_layer, text_mask  # noqa: E402
 
 PRESETS = {
-    'centred': dict(width=880, bulge=0.6, cy=H / 2),
-    'lowered': dict(width=860, bulge=0.6, cy=1240),
-    'subtle_low': dict(width=720, bulge=0.35, cy=1180, shadow=170),
-    'zoomed_in': dict(width=880, bulge=0.6, cy=1210, zoom=1.2),
-    'behind': dict(width=840, bulge=0.5, cy=790, behind=True),
+    # approved Singapore cover (Oct 2026): big, middle letters swell, word sags into a smile
+    # under the landmark. Text spans ~80% of the circle so it holds up next to the series.
+    'bulge_smile': dict(width=880, condense=0.72, bulge=0.6, arch=-0.25, cy=1170, shadow=200),
+    'smile': dict(width=860, condense=0.78, bulge=0.3, arch=-0.4, cy=1180, shadow=200),
+    'caps_smile': dict(width=870, condense=0.62, bulge=0.2, arch=-0.35, cy=1180, shadow=200, caps=True),
+    'bulge_arch': dict(width=880, condense=0.72, bulge=0.6, arch=0.25, cy=1150, shadow=200),
+    'caps_arched': dict(width=870, condense=0.62, bulge=0.2, arch=0.35, cy=1160, shadow=200, caps=True),
+    'subtle_low': dict(width=720, bulge=0.35, cy=1180, shadow=170),  # too small in the row; kept for contrast
 }
 
 
@@ -48,9 +56,41 @@ def render(bg, text, font, v):
         big = bg.resize((int(W * z), int(H * z)), Image.LANCZOS)
         ox = (big.width - W) // 2
         frame = big.crop((ox, big.height - H, ox + W, big.height))
-    mask = text_mask(text, font, v.get('width', 760), v.get('condense', 0.8), v.get('bulge', 0.35))
+    word = text.upper() if v.get('caps') else text
+    mask = text_mask(word, font, v.get('width', 880), v.get('condense', 0.72), v.get('bulge', 0.6), v.get('arch', 0.0))
     occ = sky_mask(frame, v.get('threshold', 100)) if v.get('behind') else None
     return compose(frame, text_layer(mask, v.get('cy', 1180), v.get('shadow', 150), occ))
+
+
+def in_row(img, row, slot):
+    """Paste the cover's circle into a profile screenshot (anti-aliased), crop the row."""
+    x, y, d = slot
+    big = circle(img, d * 4).resize((d, d), Image.LANCZOS)
+    m = Image.new('L', (d * 4, d * 4), 0)
+    ImageDraw.Draw(m).ellipse((0, 0, d * 4 - 1, d * 4 - 1), fill=255)
+    out = row.copy()
+    out.paste(big, (int(x - d / 2), int(y - d / 2)), m.resize((d, d), Image.LANCZOS))
+    top = max(0, int(y - d * 1.0))
+    return out.crop((0, top, out.width, min(out.height, int(y + d * 1.0))))
+
+
+def sheet_rows(images, mocks, path):
+    rows = []
+    for name, im in images.items():
+        r = mocks[name]
+        k = 1100 / r.width
+        r = r.resize((1100, int(r.height * k)))
+        cell = Image.new('RGB', (1420, max(500, r.height + 40)), (255, 255, 255))
+        ImageDraw.Draw(cell).text((10, 8), name, fill='black')
+        cell.paste(im.resize((270, 480)), (10, 20))
+        cell.paste(r, (300, (cell.height - r.height) // 2))
+        rows.append(cell)
+    s = Image.new('RGB', (1420, sum(c.height for c in rows)), (255, 255, 255))
+    y = 0
+    for c in rows:
+        s.paste(c, (0, y))
+        y += c.height
+    s.save(path, quality=90)
 
 
 def sheet(images, path):
@@ -74,6 +114,8 @@ def main():
     ap.add_argument('--out', default='covers')
     ap.add_argument('--only', help='comma-separated preset names')
     ap.add_argument('--variant', action='append', default=[], help='JSON variant, may repeat')
+    ap.add_argument('--row', help="screenshot of the user's profile with the highlights row")
+    ap.add_argument('--slot', help='x,y,d of the highlight circle to replace in --row')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     bg = load_bg(a.bg, a.t)
@@ -85,7 +127,15 @@ def main():
     for name, v in variants.items():
         out[name] = render(bg, a.text, a.font, v)
         out[name].save(f'{a.out}/{name}.png')
-    sheet(out, f'{a.out}/compare.jpg')
+    if a.row and a.slot:
+        row = Image.open(a.row).convert('RGB')
+        slot = [int(float(v)) for v in a.slot.split(',')]
+        mocks = {k: in_row(v, row, slot) for k, v in out.items()}
+        for k, v in mocks.items():
+            v.save(f'{a.out}/{k}_inrow.png')
+        sheet_rows(out, mocks, f'{a.out}/compare.jpg')
+    else:
+        sheet(out, f'{a.out}/compare.jpg')
     print(json.dumps({'compare': f'{a.out}/compare.jpg', 'variants': {k: PRESETS.get(k, {}) for k in out}},
                      default=str, indent=1))
 

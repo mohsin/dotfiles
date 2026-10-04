@@ -144,9 +144,10 @@ class Reel:
         res = []
         t = self.cfg.get('title')
         if t:
-            m = text_mask(t['text'], str(self.p(t['font'])), t.get('width', 720), t.get('condense', 0.8), t.get('bulge', 0.35))
+            m = text_mask(t['text'], str(self.p(t['font'])), t.get('width', 880), t.get('condense', 0.72),
+                          t.get('bulge', 0.6), t.get('arch', -0.25))
             png = self.root / 'build' / 'title.png'
-            text_layer(m, t.get('cy', 1180), t.get('shadow', 170)).save(png)
+            text_layer(m, t.get('cy', 1170), t.get('shadow', 200)).save(png)
             res.append((png, 0.0, t.get('until', 3.3), 0.0, t.get('fade', 0.8)))
         for c in self.cfg.get('captions', []):
             tagged = [s for s in timed if s.get('tag') == c['tag']]

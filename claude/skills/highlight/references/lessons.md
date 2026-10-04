@@ -12,6 +12,8 @@ Things that went wrong once and must not again. Each is backed by a check in the
 - **A shot that did not move** (a vlogger's still photo inside a YouTube video). Vet motion.
 - **The title fought the landmark** on the cover. Render variants, keep the landmark visible.
 - **The cover is a circle.** Design and preview the title at profile size, not full frame.
+- **The first approved cover was too small in the real row** ("subtle low", 720 px wide).
+  Judge covers mocked into a screenshot of the user's highlights, next to the others.
 - **Too long.** About 60 s; cut stock before the user's own moments.
 
 ## Technical traps

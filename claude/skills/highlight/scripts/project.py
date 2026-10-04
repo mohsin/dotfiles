@@ -24,8 +24,8 @@ TEMPLATE = {
     'grade': 'eq=contrast=1.04:saturation=1.12',
     'end_fade': 3.5,
     'audio': {'segments': [], 'xfade': 0.03, 'fade_in': 0.5, 'tail_fade': 0, 'loudnorm': -14},
-    'title': {'text': '', 'font': '', 'width': 720, 'condense': 0.8, 'bulge': 0.35, 'cy': 1180,
-              'shadow': 170, 'until': 3.3, 'fade': 0.8},
+    'title': {'text': '', 'font': '', 'width': 880, 'condense': 0.72, 'bulge': 0.6, 'arch': -0.25,
+              'cy': 1170, 'shadow': 200, 'until': 3.3, 'fade': 0.8},
     'captions': [],
     'shots': [],
 }

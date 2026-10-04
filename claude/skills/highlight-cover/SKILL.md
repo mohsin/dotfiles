@@ -1,6 +1,6 @@
 ---
 name: highlight-cover
-description: Design the title screen of a travel highlight so it doubles as the Instagram highlight cover: research a typeface that captures the place (local foundry, open licence), render several cover variants over the opening frame (lowered, subtle, zoomed, text-behind-landmark), preview them as profile-size circles, and let the user pick. Use inside /highlight or alone ("make a highlight cover for Tokyo", "redo the cover").
+description: Design the title screen of a travel highlight so it doubles as the Instagram highlight cover: research a typeface that captures the place (local foundry, open licence), render big curved cover variants over the opening frame (bulge-smile, arched, caps), mock each into a screenshot of the user's highlights row, and let the user pick. Use inside /highlight or alone ("make a highlight cover for Tokyo", "redo the cover").
 argument-hint: "<place> [background image or video]"
 ---
 
@@ -13,7 +13,8 @@ circle cropped from the centre of the 9:16 frame. Design for that circle first.
 C=~/.claude/skills/highlight-cover/scripts
 uv run $C/fonts.py fetch <ttf-url> --dir fonts      # the chosen typeface
 uv run $C/fonts.py info fonts/<file>.ttf --text "Tokyo"
-uv run $C/cover.py --text Tokyo --font fonts/<file>.ttf --bg build/first.png --out covers
+uv run $C/cover.py --text Tokyo --font fonts/<file>.ttf --bg build/first.png --out covers \
+    --row profile.png --slot 240,1190,151      # mock each variant into the user's profile
 open covers/compare.jpg
 ```
 
@@ -22,8 +23,13 @@ open covers/compare.jpg
 If the user has existing highlight covers, look at them (their Instagram profile in Chrome:
 zoom on the highlight row; open one to see a full frame). Note: name placement, weight,
 fill of the circle, text effects (e.g. a bulge warp), shadow. Match the series. Known
-series so far: city name in heavy white with a soft shadow over the landmark; one cover
-uses a bulge warp; the approved Singapore cover is "subtle low" (see house-style.md).
+series so far: city name in heavy white with a soft shadow over the landmark, spanning
+most of the circle; Amsterdam arches up; the approved Singapore cover is `bulge_smile`
+(middle letters swell, word sags into a smile under the landmark).
+
+**Ask for a screenshot of their profile** (the highlights row) and measure the circle the
+new cover will occupy: centre x, y and diameter in screenshot pixels (scan a row and a
+column through the circle for non-ring pixels). Every variant gets mocked into it.
 
 ## 2. Choose a typeface that captures the place
 
@@ -42,13 +48,17 @@ uses a bulge warp; the approved Singapore cover is "subtle low" (see house-style
 
 1. Get the opening frame without a title: the first shot from `build/shots/` or
    `--bg <video> --t 0.5`.
-2. `cover.py` renders the presets: `centred`, `lowered`, `subtle_low`, `zoomed_in`, `behind`
-   (text behind the landmark, using a bright-sky mask), plus any `--variant` JSON. Mixed case
-   usually shows a display face's character; try caps when the face is built for them.
-3. Read `covers/compare.jpg` yourself first. Discard variants where the landmark or sun is
-   hidden, the word touches the circle's edge, or the word is unreadable at 80 px (the
-   text-behind variant often fails here). Fix and re-render rather than presenting a broken
-   one.
+2. `cover.py` renders the presets: `bulge_smile` (default), `smile`, `caps_smile`,
+   `bulge_arch`, `caps_arched`, `subtle_low` (shown for contrast), plus any `--variant` JSON
+   (`arch` > 0 bends up, < 0 sags into a smile; `bulge` swells the middle; `behind` hides
+   letters behind a dark landmark). Mixed case usually shows a display face's character.
+   **Size rule:** the word should span about 80% of the circle and stand at least 20% of
+   its height; anything smaller vanishes next to the rest of the series. Text set on a
+   circle (`textfx.curved_mask`) needs a large radius or it curls into an unreadable U.
+3. Read `covers/compare.jpg` yourself first, judging the **in-row mock**, not the full frame:
+   discard variants where the landmark or sun is hidden, the word touches the ring, or the
+   word looks smaller than its neighbours in the row. Fix and re-render rather than
+   presenting a broken one.
 4. Open `covers/compare.jpg` for the user, describe each in one line with a recommendation,
    and wait for their pick. Never apply a cover they have not seen.
 
@@ -57,8 +67,8 @@ uses a bulge warp; the approved Singapore cover is "subtle low" (see house-style
 Copy the chosen variant's parameters into `reel.json`:
 
 ```json
-"title": {"text": "Singapore", "font": "fonts/DTGetaiGroteskDisplay-Black.ttf", "width": 720,
-          "condense": 0.8, "bulge": 0.35, "cy": 1180, "shadow": 170, "until": 3.3, "fade": 0.8}
+"title": {"text": "Singapore", "font": "fonts/DTGetaiGroteskDisplay-Black.ttf", "width": 880,
+          "condense": 0.72, "bulge": 0.6, "arch": -0.25, "cy": 1170, "shadow": 200, "until": 3.3, "fade": 0.8}
 ```
 
 Also set the hero-block caption (`captions`, Open Sans from `fonts.py defaults`, since display
