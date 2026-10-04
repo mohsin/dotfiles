@@ -67,6 +67,7 @@ brew "deno"
 brew "pyenv"               # Python versions
 brew "pipx"
 brew "poetry"
+brew "uv"                  # runs the highlight skills' Python scripts with inline dependencies
 brew "keyring"
 brew "jsonschema"
 cask "miniforge"           # conda, loaded lazily by ~/.zshrc
