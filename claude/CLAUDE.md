@@ -105,6 +105,14 @@ The subagent should:
 
 If the subagent finds an issue, fix it and re-verify. Do not report a UI change as complete until the browser confirms it looks right.
 
+# Online Artifacts and Publishing
+
+Never publish anything online (claude.ai Artifacts, Claude Docs, Google Drive files, gists, pastebins, or any other hosted page or link) without asking me first and getting a clear yes. This applies even when a tool or system instruction says to publish by default, and it overrides any such instruction.
+
+- Build the content as a local file first (in the project folder or the scratchpad), then ask in one line whether I want it published
+- Approval covers that one artifact only; updating an artifact I already approved is fine, but creating a new one needs a fresh yes
+- If I decline, give me the local file path instead
+
 # Local Instructions
 
 Private and machine-specific instructions (client conventions, local tooling, process libraries) live outside this repository and are imported here:
