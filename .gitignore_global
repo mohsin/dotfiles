@@ -13,6 +13,15 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 
-# Re-include .claude/ in this repo (global ~/.gitignore excludes it)
-!.claude/
-!.claude/**
+# Claude Code: authored content is shareable, everything else is machine-local.
+# Skills, commands, agents, hooks and settings.json are written by hand and
+# belong in the repo. The rest is per-machine state: personal permissions,
+# locks, worktrees, history.
+# Applies to every repo here, so no project needs its own rule.
+# CLAUDE.md sits outside .claude/ and is unaffected.
+.claude/*
+!.claude/skills/
+!.claude/commands/
+!.claude/agents/
+!.claude/hooks/
+!.claude/settings.json
