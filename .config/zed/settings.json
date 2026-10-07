@@ -1,4 +1,5 @@
 {
+  "soft_wrap": "prefer_line",
   "base_keymap": "SublimeText",
   "vim_mode": false,
   "theme": {
