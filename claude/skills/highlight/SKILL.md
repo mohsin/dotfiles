@@ -10,7 +10,7 @@ Produce `<city>.mp4` (1080x1920, ~60 s) and `<city>_cover.png` in a working fold
 by `reel.json`. Scripts run with `uv run` (dependencies install themselves on first use).
 
 ```
-HL=~/.claude/skills            # skills live in ~/Desktop/dotfiles/claude/skills (linked)
+HL=~/.claude/skills            # skills come from ~/Projects/dotfiles/claude/skills (copied)
 ```
 
 Read `references/house-style.md` before planning anything: it is the format to follow when

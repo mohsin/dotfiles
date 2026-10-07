@@ -113,6 +113,10 @@ Never publish anything online (claude.ai Artifacts, Claude Docs, Google Drive fi
 - Approval covers that one artifact only; updating an artifact I already approved is fine, but creating a new one needs a fresh yes
 - If I decline, give me the local file path instead
 
+# Dotfiles
+
+`~/.claude/CLAUDE.md` and the skills and agents that come from `~/Projects/dotfiles/claude/` are copies, installed by that repository's `bootstrap.sh`. After editing one of them in `~/.claude`, run `dotfiles sync` to carry the change into the repository, then give me a commit message for it there. Never edit both sides by hand.
+
 # Local Instructions
 
 Private and machine-specific instructions (client conventions, local tooling, process libraries) live outside this repository and are imported here:

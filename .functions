@@ -106,7 +106,7 @@ function combine_php_files() {
 
 # A Zellij session name for a repository: its own directory name, prefixed with the nearest
 # meaningful parent so that ten different "web" checkouts do not all answer to one session.
-# ~/Work/Client/acme/Projects/web -> acme-web, ~/Desktop/dotfiles -> dotfiles.
+# ~/Work/Client/acme/Projects/web -> acme-web, ~/Projects/dotfiles -> dotfiles.
 function _cockpit_session_name() {
 	local repo="${1%/}" base parent name
 	base="${repo##*/}"

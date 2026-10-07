@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+
+# Keep the copies bootstrap.sh installed in $HOME and the repository in step.
+#
+#   dotfiles status         what differs, and on which side
+#   dotfiles diff [path]    the differences (repository on the left, this machine on the right)
+#   dotfiles sync           carry local edits back into the repository, then commit them there
+#   dotfiles install        re-run bootstrap.sh (updates untouched copies, keeps local edits)
+#   dotfiles where          the repository this machine was installed from
+#
+# The repository is found through ~/.config/dotfiles/source (written by bootstrap.sh), or
+# $DOTFILES when set. If the repository moved, run ./bootstrap.sh once from its new home.
+
+set -euo pipefail
+
+STATE="$HOME/.config/dotfiles"
+MANIFEST="$STATE/manifest"
+
+die() { echo "dotfiles: $*" >&2; exit 1; }
+
+# Content fingerprint of a file or directory, ignoring Finder and Python caches.
+# bootstrap.sh has the same function; keep the two in step.
+fingerprint() {
+	if [ -d "$1" ]; then
+		(cd "$1" && find . -type f ! -name .DS_Store ! -path '*/__pycache__/*' -print0 \
+			| LC_ALL=C sort -z | xargs -0 shasum) | shasum | cut -c1-40
+	elif [ -e "$1" ]; then
+		shasum < "$1" | cut -c1-40
+	fi
+}
+
+repo() {
+	local dir="${DOTFILES:-}"
+	[ -n "$dir" ] || { [ -f "$STATE/source" ] && dir="$(cat "$STATE/source")"; } || true
+	[ -n "$dir" ] || die "not installed yet; run ./bootstrap.sh from the repository"
+	[ -f "$dir/bootstrap.sh" ] || die "no repository at $dir (moved?); run ./bootstrap.sh from its new location"
+	echo "$dir"
+}
+
+# One line per installed item: <state> <home path> <repo path>, where state is
+#   clean   identical on both sides
+#   local   edited on this machine since install (sync carries it back)
+#   repo    changed in the repository since install (install brings it over)
+#   both    changed on both sides (compare with diff and resolve by hand)
+#   missing deleted from this machine
+states() {
+	local rel src was have want
+	[ -f "$MANIFEST" ] || die "no manifest; run ./bootstrap.sh from the repository"
+	while IFS=$'\t' read -r rel src was; do
+		have="$(fingerprint "$HOME/$rel")"
+		want="$(fingerprint "$DIR/$src")"
+		if [ -z "$have" ]; then printf 'missing\t%s\t%s\n' "$rel" "$src"
+		elif [ "$have" = "$want" ]; then printf 'clean\t%s\t%s\n' "$rel" "$src"
+		elif [ "$want" = "$was" ]; then printf 'local\t%s\t%s\n' "$rel" "$src"
+		elif [ "$have" = "$was" ]; then printf 'repo\t%s\t%s\n' "$rel" "$src"
+		else printf 'both\t%s\t%s\n' "$rel" "$src"
+		fi
+	done < "$MANIFEST"
+}
+
+cmd_status() {
+	local out
+	out="$(states | grep -v "^clean$(printf '\t')" || true)"
+	if [ -z "$out" ]; then
+		echo "Everything matches $DIR"
+		return
+	fi
+	echo "$out" | while IFS=$'\t' read -r state rel _; do
+		case "$state" in
+			local) echo "  edited here:     ~/$rel (dotfiles sync)" ;;
+			repo) echo "  newer in repo:   ~/$rel (dotfiles install)" ;;
+			both) echo "  edited on both:  ~/$rel (dotfiles diff, then resolve by hand)" ;;
+			missing) echo "  deleted here:    ~/$rel (dotfiles install restores it)" ;;
+		esac
+	done
+}
+
+cmd_diff() {
+	local filter="${1:-}"
+	filter="${filter#$HOME/}"
+	states | grep -v "^clean$(printf '\t')" | while IFS=$'\t' read -r state rel src; do
+		[ -z "$filter" ] || [[ "$rel" == "$filter"* ]] || continue
+		diff -ru -x .DS_Store -x __pycache__ "$DIR/$src" "$HOME/$rel" || true
+	done
+}
+
+cmd_sync() {
+	local synced=0 conflicts=0 tmp
+	tmp="$(mktemp)"
+	while IFS=$'\t' read -r state rel src; do
+		case "$state" in
+			local)
+				echo "  sync:   ~/$rel -> $src"
+				if [ -d "$HOME/$rel" ]; then
+					rsync -a --delete --exclude .DS_Store --exclude __pycache__ "$HOME/$rel/" "$DIR/$src/"
+				else
+					cp -p "$HOME/$rel" "$DIR/$src"
+				fi
+				synced=$((synced + 1))
+				;;
+			both)
+				echo "  skip:   ~/$rel changed on both sides; see dotfiles diff ~/$rel"
+				conflicts=$((conflicts + 1))
+				;;
+		esac
+	done < <(states)
+	# Synced items now match the repository, so record their new fingerprint as installed
+	while IFS=$'\t' read -r rel src was; do
+		if [ "$(fingerprint "$HOME/$rel")" = "$(fingerprint "$DIR/$src")" ]; then
+			was="$(fingerprint "$HOME/$rel")"
+		fi
+		printf '%s\t%s\t%s\n' "$rel" "$src" "$was"
+	done < "$MANIFEST" > "$tmp"
+	cp "$tmp" "$MANIFEST"
+	rm -f "$tmp"
+	if (( synced )); then
+		echo "Synced $synced item(s). Review and commit in $DIR:"
+		git -C "$DIR" status --short
+	elif (( ! conflicts )); then
+		echo "Nothing edited here; the repository already matches."
+	fi
+}
+
+case "${1:-status}" in
+	-h|--help|help) sed -n '3,12p' "$0" | sed 's/^# \{0,1\}//'; exit ;;
+esac
+
+# Resolved once here: a die inside $(...) in a function would not stop the script
+DIR="$(repo)" || exit 1
+
+case "${1:-status}" in
+	status) cmd_status ;;
+	diff) cmd_diff "${2:-}" ;;
+	sync) cmd_sync ;;
+	install) exec "$DIR/bootstrap.sh" -f ;;
+	where) echo "$DIR" ;;
+	*) die "unknown command: $1 (try dotfiles help)" ;;
+esac
