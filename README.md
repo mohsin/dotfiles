@@ -21,7 +21,7 @@ remove what you do not want before running anything. Use at your own risk.
 | `.config/lazygit/` | Git TUI with Nerd Font icons |
 | `.config/nvim/` | Neovim on LazyVim with language extras for every stack in use and Claude Code inside the editor |
 | `.config/zed/` | Zed as the secondary editor, Sublime Text keymap, same theme and font |
-| `claude/` | Claude Code: the global `CLAUDE.md`, the `git-commit-msg` skill, and the `highlight` skills (`highlight`, `highlight-footage`, `highlight-soundtrack`, `highlight-cover`) that turn a trip into an Instagram highlight reel and cover |
+| `claude/` | Claude Code: the global `CLAUDE.md`, the `git-commit-msg` skill, the `highlight` skills (`highlight`, `highlight-footage`, `highlight-soundtrack`, `highlight-cover`) that turn a trip into an Instagram highlight reel and cover, and the `social-media-manager` agent |
 | `Brewfile`, `brew.sh` | Every Homebrew formula, cask and VS Code extension in use, grouped by purpose |
 | `bootstrap.sh` | Copies everything above into the home directory |
 | `.macos` | macOS defaults and a hidden-at-login Ghostty |
