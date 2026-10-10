@@ -122,7 +122,8 @@ brew "zola"                # static site generators
 brew "mdbook"
 
 # --- Media and documents ------------------------------------------------------
-brew "ffmpeg"
+brew "ffmpeg"              # also drives bin/mediapack
+brew "jpeg-xl"             # cjxl, djxl for bin/mediapack
 brew "yt-dlp"              # `video` and `audio` aliases
 brew "imagemagick"         # also drives bin/undupe
 brew "vips"

@@ -1,0 +1,346 @@
+#!/usr/bin/env bash
+
+# Shrink a tree of iPhone photos and videos in place for long-term storage on a disk, keeping
+# the folder structure. Each original is kept beside its replacement as NAME.bak.EXT until
+# `mediapack --clean` removes the backups, so nothing is lost until you have checked the result.
+#
+#   Videos (MOV, MP4, M4V; AVI, MKV, MTS, 3GP become MOV): HEVC on the Apple Silicon media
+#     engine, keeping HDR (HLG), 10-bit, rotation, frame timing, every audio track (spatial
+#     audio included), location, capture date and camera model. Each encode is scored against
+#     the original (VMAF on 8 s from the middle, full resolution) and redone one quality step
+#     higher (65, 72, 80) until it scores 95 or more, the point where nobody can tell them
+#     apart. Files that are already efficient, Live Photo halves and anything that would not
+#     shrink by 10% are left alone. Dolby Vision metadata is dropped; the HLG HDR picture it
+#     rides on is kept, and that is what Apple devices show.
+#   JPEG: re-packed as JPEG XL, bit-for-bit reversible (`djxl IMG.jxl IMG.jpg` gives back the
+#     original file), about 20 to 30% smaller.
+#   PNG: lossless JPEG XL, identical pixels, about half the size.
+#   HEIC, HEIF, AVIF, DNG, GIF, AAE and everything else: untouched (already efficient, or
+#     re-encoding would lose quality or Apple metadata).
+#
+# Every conversion is checked before the original is renamed: video quality, duration and
+# frame count must hold up, and JPEG XL files must decode back to the original. Safe to re-run: processed
+# files carry a marker and are skipped, as are backups and anything already converted.
+#
+# Usage: mediapack [-n] [-q QUALITY] PATH...      convert (PATH is a folder or a file)
+#        mediapack --clean [-n] [-y] FOLDER...    delete the NAME.bak.EXT backups
+#   -n  dry run: print what would happen without touching anything
+#   -q  starting video quality 1-100 (default 65; MEDIAPACK_VMAF sets the score to reach)
+#   -y  delete backups without asking
+#
+# Needs ffmpeg, jpeg-xl (cjxl, djxl) and imagemagick from the Brewfile.
+
+set -uo pipefail
+
+QUALITY="${MEDIAPACK_QUALITY:-65}"
+MIN_BPP=0.10       # bits per pixel per frame; iPhone footage is 0.14 to 0.30, our output ~0.07
+MIN_SAVING=10      # percent; a smaller saving is not worth a generation of re-encoding
+MIN_VMAF="${MEDIAPACK_VMAF:-95}"   # below this, re-encode one quality step higher
+DRY_RUN=0
+CLEAN=0
+YES=0
+TMP=""
+ROOT=""
+
+converted=0 skipped=0 failed=0 bytes_before=0 bytes_after=0
+
+usage() {
+	sed -n '/^# Usage:/,/^# Needs/p' "$0" | sed 's/^# \{0,1\}//'
+	exit "${1:-0}"
+}
+
+human() {
+	awk -v b="$1" 'BEGIN { split("B KB MB GB TB", u); i = 1; while (b >= 1000 && i < 5) { b /= 1000; i++ } printf (i == 1 ? "%d %s" : "%.1f %s"), b, u[i] }'
+}
+
+size_of() { stat -f%z "$1"; }
+
+# A path relative to the folder being processed, for shorter output.
+rel() { printf '%s' "${1#"$ROOT"/}"; }
+
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Remove a half-written output if the run is interrupted.
+cleanup() {
+	[ -n "$TMP" ] && rm -f "$TMP"
+	echo
+	summary
+	exit 130
+}
+trap cleanup INT TERM
+
+summary() {
+	(( DRY_RUN || CLEAN )) && return
+	local saved=$(( bytes_before - bytes_after ))
+	echo "Converted $converted, skipped $skipped, failed $failed."
+	(( converted )) && echo "$(human "$bytes_before") -> $(human "$bytes_after"), saved $(human "$saved") ($(( saved * 100 / bytes_before ))%)."
+	(( converted )) && echo "Originals are kept as *.bak.*; check the results, then run: mediapack --clean <folder>"
+}
+
+skip() { echo "  skip  $(rel "$1"): $2"; skipped=$(( skipped + 1 )); }
+fail() { echo "  FAIL  $(rel "$1"): $2"; failed=$(( failed + 1 )); [ -n "$TMP" ] && rm -f "$TMP"; TMP=""; }
+
+# Free space on the volume holding $1, in bytes.
+free_space() { df -k "$1" | awk 'NR == 2 { print $4 * 1024 }'; }
+
+# Swap the checked conversion in: the original becomes NAME.bak.EXT, the new file takes its
+# place (or NAME.NEWEXT), with the original's modification and creation dates.
+commit() {
+	local src="$1" tmp="$2" dst="$3" dir base ext
+	dir="$(dirname "$src")"; base="$(basename "$src")"; ext="${base##*.}"; base="${base%.*}"
+	touch -r "$src" "$tmp"
+	command -v SetFile > /dev/null && SetFile -d "$(GetFileInfo -d "$src")" "$tmp" 2> /dev/null
+	# mv -n reports success even when it declines to overwrite, so check every step.
+	[ -e "$dir/$base.bak.$ext" ] && return 1
+	mv -n "$src" "$dir/$base.bak.$ext" && [ ! -e "$src" ] || return 1
+	if [ "$dst" != "$src" ] && [ -e "$dst" ] || ! mv -n "$tmp" "$dst" || [ -e "$tmp" ]; then
+		mv -n "$dir/$base.bak.$ext" "$src"
+		return 1
+	fi
+	TMP=""
+	local before after
+	before=$(size_of "$dir/$base.bak.$ext"); after=$(size_of "$dst")
+	bytes_before=$(( bytes_before + before )); bytes_after=$(( bytes_after + after ))
+	converted=$(( converted + 1 ))
+	echo "  done  $(rel "$src"): $(human "$before") -> $(human "$after") ($(( (before - after) * 100 / before ))% smaller)"
+}
+
+# True when the new file is not at least MIN_SAVING percent smaller than the original.
+too_big() { (( $(size_of "$2") * 100 > $(size_of "$1") * (100 - MIN_SAVING) )); }
+
+probe() { ffprobe -v error "$@" -of default=nw=1:nk=1 2> /dev/null | head -1; }
+
+# The next step up the quality ladder: 65 -> 72 -> 80.
+next_q() { local n=$(( $1 + 7 + ($1 >= 72) )); (( n > 100 )) && n=100; echo "$n"; }
+
+# Encode $1 into $2 at quality $3. The first attempt copies the audio untouched; formats
+# MOV cannot carry fall back to AAC.
+encode() {
+	local src="$1" out="$2" q="$3" profile="$4" fmt="$5" audio
+	for audio in copy aac_at; do
+		ffmpeg -nostdin -hide_banner -loglevel error -y -noautorotate -i "$src" \
+			-map 0:v:0 -map '0:a?' -fps_mode passthrough -enc_time_base:v demux \
+			-c:v hevc_videotoolbox -q:v "$q" -profile:v "$profile" -pix_fmt "$fmt" -tag:v hvc1 \
+			-c:a "$audio" $([ "$audio" = aac_at ] && echo "-b:a 256k") \
+			-map_metadata 0 -metadata mediapack="q$q" -movflags +use_metadata_tags+faststart \
+			"$out" 2> >(grep -v -e apac -e 'codec parameters' -e analyzeduration -e 'Guessed Channel' >&2) \
+			&& [ -s "$out" ] && return 0
+	done
+	return 1
+}
+
+# VMAF of $2 against the original $1 over 8 seconds from the middle of the clip, at full
+# resolution ($4 is the pixel count; 4K uses the 4K model). 95 and up is indistinguishable.
+vmaf() {
+	local start model=""
+	start=$(awk -v d="$3" 'BEGIN { s = d / 2 - 4; printf "%.3f", (s > 0 ? s : 0) }')
+	(( $4 >= 6000000 )) && model="model=version=vmaf_4k_v0.6.1:"
+	ffmpeg -nostdin -hide_banner -nostats -ss "$start" -t 8 -i "$2" -ss "$start" -t 8 -i "$1" -lavfi \
+		"[0:v]setpts=PTS-STARTPTS,format=yuv420p10le[d];[1:v]setpts=PTS-STARTPTS,format=yuv420p10le[r];[d][r]libvmaf=${model}n_threads=4:n_subsample=2" \
+		-f null - 2>&1 | awk '/VMAF score:/ { printf "%.1f", $NF }'
+}
+
+video() {
+	local src="$1" dir base ext out_ext dst
+	dir="$(dirname "$src")"; base="$(basename "$src")"; ext="${base##*.}"; base="${base%.*}"
+	case "$(lower "$ext")" in
+		mov|mp4|m4v) out_ext="$ext" ;;
+		*) out_ext="MOV" ;;
+	esac
+	dst="$dir/$base.$out_ext"
+
+	local codec w h fps br pix frames dur
+	codec=$(probe -select_streams v:0 -show_entries stream=codec_name "$src")
+	[ -z "$codec" ] && { skip "$src" "unreadable or empty"; return; }
+	[ -n "$(probe -show_entries format_tags=mediapack "$src")" ] && { skip "$src" "already processed"; return; }
+	[ -n "$(probe -show_entries format_tags=com.apple.quicktime.content.identifier "$src")" ] && { skip "$src" "Live Photo video (kept paired with its photo)"; return; }
+	[ "$dst" != "$src" ] && [ -e "$dst" ] && { skip "$src" "$(basename "$dst") already exists"; return; }
+	[ -e "$dir/$base.bak.$ext" ] && { skip "$src" "$base.bak.$ext already exists"; return; }
+
+	w=$(probe -select_streams v:0 -show_entries stream=width "$src")
+	h=$(probe -select_streams v:0 -show_entries stream=height "$src")
+	fps=$(probe -select_streams v:0 -show_entries stream=avg_frame_rate "$src")
+	br=$(probe -select_streams v:0 -show_entries stream=bit_rate "$src")
+	[[ "$br" =~ ^[0-9]+$ ]] || br=$(probe -show_entries format=bit_rate "$src")
+	pix=$(probe -select_streams v:0 -show_entries stream=pix_fmt "$src")
+	frames=$(probe -select_streams v:0 -show_entries stream=nb_frames "$src")
+	dur=$(probe -show_entries format=duration "$src")
+	# Pre-roll packets flagged discard (edit lists, trimmed clips) are never shown, so they
+	# do not count; they sit at the start, so the first few packets are enough to find them.
+	if [[ "$frames" =~ ^[0-9]+$ ]]; then
+		local hidden
+		hidden=$(ffprobe -v error -select_streams v:0 -read_intervals '%+#120' -show_entries packet=flags -of csv=p=0 "$src" 2> /dev/null | grep -c D)
+		frames=$(( frames - hidden ))
+	fi
+
+	local bpp
+	bpp=$(awk -v b="$br" -v w="$w" -v h="$h" -v f="$fps" 'BEGIN { split(f, r, "/"); f = (r[2] ? r[1] / r[2] : r[1]); printf "%.3f", (w * h * f > 0 ? b / (w * h * f) : 1) }')
+	if awk -v a="$bpp" -v m="$MIN_BPP" 'BEGIN { exit !(a < m) }'; then
+		skip "$src" "already efficient ($codec, $bpp bpp)"; return
+	fi
+
+	local profile fmt
+	case "$pix" in
+		*10*|*12*|*16*) profile=main10; fmt=p010le ;;
+		*) profile=main; fmt=nv12 ;;
+	esac
+
+	if (( DRY_RUN )); then
+		echo "  would encode  $(rel "$src") ($codec ${w}x${h} $profile, $(human "$(size_of "$src")"), $bpp bpp)"
+		return
+	fi
+	(( $(free_space "$dir") > $(size_of "$src") )) || { fail "$src" "not enough free space for the new copy"; return; }
+
+	TMP="$dir/.$base.mediapack.$out_ext"
+	echo "  encode  $(rel "$src") ($codec ${w}x${h}, $(human "$(size_of "$src")"))"
+	# Encode, score a sample against the original, and step the quality up until it is
+	# transparent: grainy, dark or busy footage needs more than clean iPhone daylight video.
+	local q="$QUALITY" score
+	while :; do
+		encode "$src" "$TMP" "$q" "$profile" "$fmt" || { fail "$src" "ffmpeg could not encode it"; return; }
+		score=$(vmaf "$src" "$TMP" "$dur" $(( w * h )))
+		if [ -z "$score" ]; then
+			echo "        q$q, quality check unavailable"; break
+		fi
+		awk -v s="$score" -v m="$MIN_VMAF" 'BEGIN { exit !(s >= m) }' && { echo "        q$q, VMAF $score"; break; }
+		(( q >= 80 )) && { echo "        q$q, VMAF $score (highest step)"; break; }
+		echo "        q$q, VMAF $score is below $MIN_VMAF, trying q$(next_q "$q")"
+		q=$(next_q "$q")
+	done
+
+	local new_dur new_frames
+	new_dur=$(probe -show_entries format=duration "$TMP")
+	new_frames=$(probe -select_streams v:0 -show_entries stream=nb_frames "$TMP")
+	if ! awk -v a="$dur" -v b="$new_dur" 'BEGIN { d = a - b; exit !(d < 0.5 && d > -0.5) }'; then
+		fail "$src" "duration changed ($dur s -> $new_dur s), original kept"; return
+	fi
+	if [[ "$frames" =~ ^[0-9]+$ ]] && [ "$frames" != "$new_frames" ]; then
+		fail "$src" "frame count changed ($frames -> $new_frames), original kept"; return
+	fi
+	if too_big "$src" "$TMP"; then
+		skip "$src" "would only save $(( 100 - $(size_of "$TMP") * 100 / $(size_of "$src") ))%, original kept"
+		rm -f "$TMP"; TMP=""; return
+	fi
+	commit "$src" "$TMP" "$dst" || fail "$src" "could not rename the files"
+}
+
+image() {
+	local src="$1" kind="$2" dir base dst
+	dir="$(dirname "$src")"; base="$(basename "$src")"; base="${base%.*}"
+	dst="$dir/$base.jxl"
+	[ -e "$dst" ] && { skip "$src" "$base.jxl already exists"; return; }
+	[ -e "$dir/$base.bak.${src##*.}" ] && { skip "$src" "$base.bak.${src##*.} already exists"; return; }
+	if (( DRY_RUN )); then
+		echo "  would convert  $(rel "$src") -> $base.jxl ($(human "$(size_of "$src")"))"
+		return
+	fi
+
+	TMP="$dir/.$base.mediapack.jxl"
+	local check="$dir/.$base.mediapack.check"
+	if [ "$kind" = jpeg ]; then
+		cjxl --quiet --lossless_jpeg=1 "$src" "$TMP" 2> /dev/null || { fail "$src" "cjxl could not read it"; return; }
+		# The JPEG must come back byte for byte.
+		djxl --quiet "$TMP" "$check.jpg" 2> /dev/null && cmp -s "$src" "$check.jpg"
+		local ok=$?; rm -f "$check.jpg"
+		(( ok == 0 )) || { fail "$src" "JPEG XL did not reconstruct the original, original kept"; return; }
+	else
+		cjxl --quiet -d 0 -e 7 "$src" "$TMP" 2> /dev/null || { fail "$src" "cjxl could not read it"; return; }
+		# Every pixel must match.
+		djxl --quiet "$TMP" "$check.png" 2> /dev/null
+		local diff
+		diff=$(magick compare -metric AE "$src" "$check.png" null: 2>&1 | awk '{ print $1 }'); rm -f "$check.png"
+		[ "$diff" = 0 ] || { fail "$src" "pixels differ after conversion, original kept"; return; }
+	fi
+	if too_big "$src" "$TMP"; then
+		skip "$src" "JPEG XL would not be meaningfully smaller"
+		rm -f "$TMP"; TMP=""; return
+	fi
+	commit "$src" "$TMP" "$dst" || fail "$src" "could not rename the files"
+}
+
+process() {
+	local f="$1" name
+	name="$(basename "$f")"
+	case "$name" in
+		._*|.*.mediapack.*|*.bak.*) return ;;   # AppleDouble files, our temp files, backups
+	esac
+	case "$(lower "${name##*.}")" in
+		mov|mp4|m4v|avi|mkv|mts|m2ts|3gp) video "$f" ;;
+		jpg|jpeg) image "$f" jpeg ;;
+		png) image "$f" png ;;
+	esac
+}
+
+clean() {
+	local dir="$1" list total=0 n=0 f base stem
+	ROOT="${dir%/}"
+	list="$(mktemp)"
+	# Only a backup whose converted file is still there counts, so an unrelated file that
+	# happens to have ".bak." in its name is never touched.
+	while IFS= read -r -d '' f; do
+		base="$(basename "$f")"
+		[[ "$base" == ._* ]] && continue
+		stem="$(dirname "$f")/${base%%.bak.*}"
+		compgen -G "$stem.*" | grep -qv '\.bak\.' || continue
+		printf '%s\0' "$f" >> "$list"
+		total=$(( total + $(size_of "$f") )); n=$(( n + 1 ))
+	done < <(find "$dir" -type f -name '*.bak.*' -print0)
+
+	if (( n == 0 )); then
+		echo "No backups under $dir."; rm -f "$list"; return
+	fi
+	echo "$n backups under $dir, $(human "$total")."
+	if (( DRY_RUN )); then
+		while IFS= read -r -d '' f; do echo "  $(rel "$f")"; done < "$list"
+		rm -f "$list"; return
+	fi
+	if (( ! YES )); then
+		read -r -p "Delete them? [y/N] " reply
+		[[ "$reply" =~ ^[Yy]$ ]] || { echo "Kept."; rm -f "$list"; return; }
+	fi
+	while IFS= read -r -d '' f; do
+		rm -f "$f" "$(dirname "$f")/._$(basename "$f")"
+	done < "$list"
+	rm -f "$list"
+	echo "Deleted $n backups, freed $(human "$total")."
+}
+
+paths=()
+while (( $# )); do
+	case "$1" in
+		--clean) CLEAN=1 ;;
+		-n|--dry-run) DRY_RUN=1 ;;
+		-y|--yes) YES=1 ;;
+		-q|--quality) shift; QUALITY="${1:-}" ;;
+		-h|--help) usage ;;
+		-*) echo "Unknown option: $1" >&2; usage 1 ;;
+		*) paths+=("$1") ;;
+	esac
+	shift
+done
+(( ${#paths[@]} )) || usage 1
+[[ "$QUALITY" =~ ^[0-9]+$ ]] && (( QUALITY >= 1 && QUALITY <= 100 )) || { echo "Quality must be 1-100" >&2; exit 1; }
+
+if (( CLEAN )); then
+	for p in "${paths[@]}"; do clean "$p"; done
+	exit 0
+fi
+
+for tool in ffmpeg ffprobe cjxl djxl magick; do
+	command -v "$tool" > /dev/null || { echo "mediapack needs $tool (see the Brewfile)" >&2; exit 1; }
+done
+
+for p in "${paths[@]}"; do
+	if [ -f "$p" ]; then
+		process "$p"
+	elif [ -d "$p" ]; then
+		ROOT="${p%/}"
+		echo "$ROOT"
+		while IFS= read -r -d '' f; do
+			process "$f"
+		done < <(find "$p" -type f -print0 | sort -z)
+	else
+		echo "No such file or folder: $p" >&2
+	fi
+done
+summary

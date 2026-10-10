@@ -174,3 +174,6 @@ alias path='echo -e ${PATH//:/\\n}'
 
 # Rust docs: the aarch64 toolchain has no rust-docs component installed, so read the x86_64 copy
 alias rustdoc="rustup doc --toolchain=stable-x86_64-apple-darwin"
+
+# Delete the NAME.bak.EXT originals `mediapack` keeps, in a folder and all its subfolders
+alias mediaclean="mediapack --clean"

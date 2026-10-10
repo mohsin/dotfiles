@@ -26,7 +26,7 @@ remove what you do not want before running anything. Use at your own risk.
 | `bootstrap.sh` | Copies everything above into the home directory |
 | `.macos` | macOS defaults and a hidden-at-login Ghostty |
 | `init/` | Files `.macos` and `bootstrap.sh` install: a launch agent and a Terminal.app theme |
-| `bin/` | Small scripts, copied into `~/bin`, including `dotfiles` (keeps the copies and the repository in step) |
+| `bin/` | Small scripts, copied into `~/bin`, including `dotfiles` (keeps the copies and the repository in step) and `mediapack` (shrinks a folder of iPhone photos and videos in place for archiving, keeping originals as `*.bak.*` until `mediaclean`) |
 | `.vimrc`, `.vim/` | Plain Vim, for machines without Neovim |
 
 ## Installation
