@@ -6,12 +6,13 @@
 #
 #   Videos (MOV, MP4, M4V; AVI, MKV, MTS, 3GP become MOV): HEVC on the Apple Silicon media
 #     engine, keeping HDR (HLG), 10-bit, rotation, frame timing, every audio track (spatial
-#     audio included), location, capture date and camera model. Each encode is scored against
-#     the original (VMAF on 8 s from the middle, full resolution) and redone one quality step
-#     higher (65, 72, 80) until it scores 95 or more, the point where nobody can tell them
-#     apart. Files that are already efficient, Live Photo halves and anything that would not
-#     shrink by 10% are left alone. Dolby Vision metadata is dropped; the HLG HDR picture it
-#     rides on is kept, and that is what Apple devices show.
+#     audio included), location, capture date and camera model. An 8 s sample from the middle
+#     is encoded first and scored against the original (VMAF, full resolution), one quality
+#     step higher at a time (65, 72, 80) until it scores 95 or more, the point where nobody
+#     can tell them apart; the sample also shows whether the clip will shrink at all. Files
+#     that are already efficient, Live Photo halves and anything that would not shrink by
+#     10% are left alone. Dolby Vision metadata is dropped; the HLG HDR picture it rides on
+#     is kept, and that is what Apple devices show.
 #   JPEG: re-packed as JPEG XL, bit-for-bit reversible (`djxl IMG.jxl IMG.jpg` gives back the
 #     original file), about 20 to 30% smaller.
 #   PNG: lossless JPEG XL, identical pixels, about half the size.
@@ -113,13 +114,16 @@ probe() { ffprobe -v error "$@" -of default=nw=1:nk=1 2> /dev/null | head -1; }
 # The next step up the quality ladder: 65 -> 72 -> 80.
 next_q() { local n=$(( $1 + 7 + ($1 >= 72) )); (( n > 100 )) && n=100; echo "$n"; }
 
-# Encode $1 into $2 at quality $3. The first attempt copies the audio untouched; formats
-# MOV cannot carry fall back to AAC.
+# Encode $1 into $2 at quality $3. With a sixth argument, encode only the 8 s sample that
+# starts there, video only. The first attempt copies the audio untouched; formats MOV cannot
+# carry fall back to AAC.
 encode() {
 	local src="$1" out="$2" q="$3" profile="$4" fmt="$5" audio
+	local cut=() streams=(-map 0:v:0 -map '0:a?')
+	[ -n "${6:-}" ] && { cut=(-ss "$6" -t 8); streams=(-map 0:v:0); }
 	for audio in copy aac_at; do
-		ffmpeg -nostdin -hide_banner -loglevel error -y -noautorotate -i "$src" \
-			-map 0:v:0 -map '0:a?' -fps_mode passthrough -enc_time_base:v demux \
+		ffmpeg -nostdin -hide_banner -loglevel error -y -noautorotate ${cut[@]+"${cut[@]}"} -i "$src" \
+			"${streams[@]}" -fps_mode passthrough -enc_time_base:v demux \
 			-c:v hevc_videotoolbox -q:v "$q" -profile:v "$profile" -pix_fmt "$fmt" -tag:v hvc1 \
 			-c:a "$audio" $([ "$audio" = aac_at ] && echo "-b:a 256k") \
 			-map_metadata 0 -metadata mediapack="q$q" -movflags +use_metadata_tags+faststart \
@@ -129,13 +133,13 @@ encode() {
 	return 1
 }
 
-# VMAF of $2 against the original $1 over 8 seconds from the middle of the clip, at full
-# resolution ($4 is the pixel count; 4K uses the 4K model). 95 and up is indistinguishable.
+# VMAF of the sample $1 against the same 8 s of the original $2, cut the same way it was
+# encoded so the frames line up, at full resolution ($4 is the pixel count; 4K uses the 4K
+# model). 95 and up is indistinguishable.
 vmaf() {
-	local start model=""
-	start=$(awk -v d="$3" 'BEGIN { s = d / 2 - 4; printf "%.3f", (s > 0 ? s : 0) }')
+	local model=""
 	(( $4 >= 6000000 )) && model="model=version=vmaf_4k_v0.6.1:"
-	ffmpeg -nostdin -hide_banner -nostats -ss "$start" -t 8 -i "$2" -ss "$start" -t 8 -i "$1" -lavfi \
+	ffmpeg -nostdin -hide_banner -nostats -i "$1" -ss "$3" -t 8 -i "$2" -lavfi \
 		"[0:v]setpts=PTS-STARTPTS,format=yuv420p10le[d];[1:v]setpts=PTS-STARTPTS,format=yuv420p10le[r];[d][r]libvmaf=${model}n_threads=4:n_subsample=2" \
 		-f null - 2>&1 | awk '/VMAF score:/ { printf "%.1f", $NF }'
 }
@@ -191,14 +195,16 @@ video() {
 	fi
 	(( $(free_space "$dir") > $(size_of "$src") )) || { fail "$src" "not enough free space for the new copy"; return; }
 
-	TMP="$dir/.$base.mediapack.$out_ext"
-	echo "  encode  $(rel "$src") ($codec ${w}x${h}, $(human "$(size_of "$src")"))"
-	# Encode, score a sample against the original, and step the quality up until it is
-	# transparent: grainy, dark or busy footage needs more than clean iPhone daylight video.
-	local q="$QUALITY" score
+	# Settle the quality on an 8 s sample from the middle: score it against the original and
+	# step up until it is transparent (grainy, dark or busy footage needs more than clean
+	# daylight video), then check the saving before spending time on the whole clip.
+	local start q="$QUALITY" score sample_size sample_dur expected saving
+	start=$(awk -v d="$dur" 'BEGIN { s = d / 2 - 4; printf "%.3f", (s > 0 ? s : 0) }')
+	TMP="$dir/.$base.mediapack.sample.$out_ext"
+	echo "  sample  $(rel "$src") ($codec ${w}x${h}, $(human "$(size_of "$src")"))"
 	while :; do
-		encode "$src" "$TMP" "$q" "$profile" "$fmt" || { fail "$src" "ffmpeg could not encode it"; return; }
-		score=$(vmaf "$src" "$TMP" "$dur" $(( w * h )))
+		encode "$src" "$TMP" "$q" "$profile" "$fmt" "$start" || { fail "$src" "ffmpeg could not encode it"; return; }
+		score=$(vmaf "$TMP" "$src" "$start" $(( w * h )))
 		if [ -z "$score" ]; then
 			echo "        q$q, quality check unavailable"; break
 		fi
@@ -207,6 +213,18 @@ video() {
 		echo "        q$q, VMAF $score is below $MIN_VMAF, trying q$(next_q "$q")"
 		q=$(next_q "$q")
 	done
+	sample_size=$(size_of "$TMP")
+	sample_dur=$(probe -show_entries format=duration "$TMP")
+	rm -f "$TMP"; TMP=""
+	expected=$(awk -v b="$br" -v d="$sample_dur" 'BEGIN { printf "%d", b * d / 8 }')
+	if (( expected > 0 )); then
+		saving=$(( 100 - sample_size * 100 / expected ))
+		(( saving < MIN_SAVING )) && { skip "$src" "would only save ${saving}% at q$q, original kept"; return; }
+	fi
+
+	TMP="$dir/.$base.mediapack.$out_ext"
+	echo "        encoding the whole clip at q$q"
+	encode "$src" "$TMP" "$q" "$profile" "$fmt" || { fail "$src" "ffmpeg could not encode it"; return; }
 
 	local new_dur new_frames
 	new_dur=$(probe -show_entries format=duration "$TMP")
