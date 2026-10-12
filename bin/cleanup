@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+
+# Free disk space by clearing caches that every tool in the Brewfile rebuilds or re-downloads
+# on its own: package manager caches, old Homebrew versions, build caches and editor indexes.
+# Nothing here holds work, settings or installed versions, so the worst case after a run is a
+# slower first install or build while a cache refills. Tools that are not installed are skipped.
+#
+# Cleared:
+#   Homebrew       old versions and every download (brew cleanup --prune=all -s)
+#   JavaScript     npm, nvm, pnpm (unreferenced packages only), bun, deno, node-gyp, TypeScript
+#   Python         uv, pip, Poetry, conda packages, pre-commit (unused hook envs only)
+#   PHP            Composer, the phpactor index (rebuilt when Neovim next opens a PHP project)
+#   JVM / Android  Gradle caches (skipped while a Gradle daemon runs), CocoaPods
+#   Rust / Go      downloaded crates and their unpacked sources, the Go build cache
+#   Xcode          DerivedData, simulator caches, simulators for runtimes no longer installed
+#   Docker         dangling images and the build cache, only while Docker is running
+#   Other          leftover app updater downloads, the Trash
+#
+# Never touched, only listed at the end with their sizes for a decision by hand: iPhone
+# backups, Android system images, Docker volumes and images in use, installed Node and Python
+# versions, test browsers (Puppeteer, Cypress, Playwright), ML models and ~/Downloads.
+#
+# Usage: cleanup [-n]
+#   -n  dry run: show what each step would clear and its size, without deleting anything
+
+set -uo pipefail
+
+DRY_RUN=0
+case "${1:-}" in
+	-n|--dry-run) DRY_RUN=1 ;;
+	-h|--help) sed -n '3,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	"") ;;
+	*) echo "cleanup: unknown option $1 (try --help)" >&2; exit 1 ;;
+esac
+
+C="$HOME/Library/Caches"
+bold=$'\e[1m'; dim=$'\e[2m'; reset=$'\e[0m'
+
+has() { command -v "$1" > /dev/null 2>&1; }
+
+# Free space on the data volume, in KiB
+free_kb() { df -k "$HOME" | awk 'NR == 2 { print $4 }'; }
+
+# Total size of the given paths, in KiB (missing paths count as zero)
+size_kb() {
+	local p total=0
+	for p in "$@"; do
+		[ -e "$p" ] && total=$(( total + $(du -sk "$p" 2>/dev/null | awk '{ print $1 }') ))
+	done
+	echo "$total"
+}
+
+human() { awk -v k="$1" 'BEGIN { split("K M G T", u); i = 1; while (k >= 1024 && i < 4) { k /= 1024; i++ } printf (i == 1 ? "%d%s" : "%.1f%s"), k, u[i] }'; }
+
+# step NAME PATH... -- COMMAND...
+# Show the size of PATHs, then run COMMAND (or just report the size on a dry run).
+step() {
+	local name="$1" paths=() kb
+	shift
+	while [ $# -gt 0 ] && [ "$1" != "--" ]; do paths+=("$1"); shift; done
+	shift
+	kb=$(size_kb "${paths[@]}")
+	[ "$kb" -eq 0 ] && return
+	printf '%s%-28s%s %8s' "$bold" "$name" "$reset" "$(human "$kb")"
+	if [ "$DRY_RUN" -eq 1 ]; then
+		printf '  %swould clear%s\n' "$dim" "$reset"
+	elif "$@" > /dev/null 2>&1; then
+		printf '  cleared\n'
+	else
+		printf '  failed (run it by hand: %s)\n' "$*"
+	fi
+}
+
+# rm_paths PATH...: delete paths, for caches whose tool has no clean command
+rm_paths() { rm -rf "$@"; }
+
+before=$(free_kb)
+echo "Free before: $(human "$before")"
+echo
+
+# --- Homebrew ---------------------------------------------------------------
+has brew && step "Homebrew" "$(brew --cache)" -- brew cleanup --prune=all -s
+
+# --- JavaScript -------------------------------------------------------------
+# nvm is a shell function, so ~/.npm and nvm's own cache are cleared directly
+has npm && step "npm" "$HOME/.npm/_cacache" -- npm cache clean --force
+step "nvm downloads" "$HOME/.nvm/.cache" -- rm_paths "$HOME/.nvm/.cache"
+has pnpm && step "pnpm store (unused)" "$(pnpm store path 2>/dev/null)" "$C/pnpm" -- pnpm store prune
+# `bun pm cache rm` refuses to run outside a project, so the global cache is removed directly
+step "bun" "$HOME/.bun/install/cache" -- rm_paths "$HOME/.bun/install/cache"
+has deno && step "deno" "$C/deno" -- deno clean
+step "node-gyp headers" "$C/node-gyp" -- rm_paths "$C/node-gyp"
+step "TypeScript typings" "$C/typescript" -- rm_paths "$C/typescript"
+
+# --- Python -----------------------------------------------------------------
+has uv && step "uv" "$(uv cache dir 2>/dev/null)" -- uv cache clean
+has pip3 && step "pip" "$C/pip" -- pip3 cache purge
+step "Poetry" "$C/pypoetry/cache" "$C/pypoetry/artifacts" -- rm_paths "$C/pypoetry/cache" "$C/pypoetry/artifacts"
+conda="$(brew --prefix 2>/dev/null)/Caskroom/miniforge/base/bin/conda"
+[ -x "$conda" ] && step "conda packages" "$(dirname "$(dirname "$conda")")/pkgs" -- "$conda" clean --all --yes
+has pre-commit && step "pre-commit (unused)" "$HOME/.cache/pre-commit" -- pre-commit gc
+
+# --- PHP --------------------------------------------------------------------
+has composer && step "Composer" "$C/composer" -- composer clear-cache
+step "phpactor index" "$HOME/.cache/phpactor" -- rm_paths "$HOME/.cache/phpactor"
+
+# --- JVM and mobile ---------------------------------------------------------
+if pgrep -f GradleDaemon > /dev/null; then
+	echo "Gradle                       skipped (a Gradle daemon is running; stop it with gradle --stop)"
+else
+	step "Gradle" "$HOME/.gradle/caches" -- rm_paths "$HOME/.gradle/caches"
+fi
+has pod && step "CocoaPods" "$C/CocoaPods" -- pod cache clean --all
+
+# --- Rust and Go ------------------------------------------------------------
+# The registry index stays, so cargo works offline for crates it has already resolved
+step "cargo downloads" "$HOME/.cargo/registry/cache" "$HOME/.cargo/registry/src" "$HOME/.cargo/git/checkouts" \
+	-- rm_paths "$HOME/.cargo/registry/cache" "$HOME/.cargo/registry/src" "$HOME/.cargo/git/checkouts"
+has go && step "Go build cache" "$(go env GOCACHE 2>/dev/null)" -- go clean -cache
+
+# --- Xcode ------------------------------------------------------------------
+dev="$HOME/Library/Developer"
+step "Xcode DerivedData" "$dev/Xcode/DerivedData" -- rm_paths "$dev/Xcode/DerivedData"
+step "Simulator caches" "$dev/CoreSimulator/Caches" -- rm_paths "$dev/CoreSimulator/Caches"
+has xcrun && [ "$DRY_RUN" -eq 0 ] && xcrun simctl delete unavailable > /dev/null 2>&1
+
+# --- Docker -----------------------------------------------------------------
+if has docker && docker info > /dev/null 2>&1; then
+	if [ "$DRY_RUN" -eq 1 ]; then
+		echo "Docker                       would remove dangling images and the build cache"
+	else
+		docker image prune --force > /dev/null 2>&1
+		docker builder prune --force > /dev/null 2>&1
+		echo "Docker                       removed dangling images and the build cache"
+	fi
+fi
+
+# --- Other ------------------------------------------------------------------
+shopt -s nullglob
+updaters=("$C"/*.ShipIt "$C"/*-updater "$C"/fanal)
+shopt -u nullglob
+[ ${#updaters[@]} -gt 0 ] && step "App updater leftovers" "${updaters[@]}" -- rm_paths "${updaters[@]}"
+shopt -s nullglob dotglob
+trash=("$HOME/.Trash"/*)
+shopt -u nullglob dotglob
+[ ${#trash[@]} -gt 0 ] && step "Trash" "${trash[@]}" -- rm_paths "${trash[@]}"
+
+after=$(free_kb)
+echo
+if [ "$DRY_RUN" -eq 0 ]; then
+	echo "Free after:  $(human "$after") (${bold}$(human $(( after > before ? after - before : 0 )))${reset} freed)"
+	echo
+fi
+
+# --- Left for a decision by hand --------------------------------------------
+echo "Not touched; review these by hand if you need more room:"
+review() {
+	local kb
+	kb=$(size_kb "$2")
+	[ "$kb" -gt 102400 ] && printf '  %8s  %-42s %s%s%s\n' "$(human "$kb")" "$1" "$dim" "$3" "$reset"
+}
+review "iPhone backups" "$HOME/Library/Application Support/MobileSync/Backup" "Finder, iPhone, Manage Backups"
+review "Android system images" "$HOME/Library/Android/sdk/system-images" "Android Studio, SDK Manager"
+review "Docker disk image" "$HOME/Library/Containers/com.docker.docker" "docker system df, then docker system prune"
+review "Downloads" "$HOME/Downloads" ""
+review "Node versions" "$HOME/.nvm/versions/node" "nvm ls, then nvm uninstall VERSION"
+review "Python versions" "$HOME/.pyenv/versions" "pyenv versions, then pyenv uninstall VERSION"
+review "Puppeteer browsers" "$HOME/.cache/puppeteer" "reinstalled by npm install in projects using it"
+review "Cypress binaries" "$C/Cypress" "npx cypress cache prune"
+review "Codex runtimes" "$HOME/.cache/codex-runtimes" ""
+review "Hugging Face models" "$HOME/.cache/huggingface" ""
+review "Chrome cache" "$C/Google" "Chrome, Clear browsing data"
