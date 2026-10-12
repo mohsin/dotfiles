@@ -254,6 +254,19 @@ if [ ! -f "$HOME/.claude/CLAUDE.local.md" ]; then
 	fi
 fi
 
+# Claude Code status line. settings.json stays machine-local (permissions, plugins, client
+# hook paths), so only the statusLine entry is added, and only when none is set yet.
+settings="$HOME/.claude/settings.json"
+if command -v jq > /dev/null && ! jq -e '.statusLine' "$settings" > /dev/null 2>&1; then
+	echo "  merge:  statusLine into ~/.claude/settings.json"
+	if (( ! DRY_RUN )); then
+		mkdir -p "$HOME/.claude"
+		[ -f "$settings" ] || echo '{}' > "$settings"
+		jq '.statusLine = {type: "command", command: "bash ~/.claude/statusline-command.sh"}' "$settings" > "$settings.tmp" \
+			&& mv "$settings.tmp" "$settings"
+	fi
+fi
+
 # 10. Remember what was installed and from where, for the next run and for bin/dotfiles
 if (( ! DRY_RUN )); then
 	mkdir -p "$STATE"
