@@ -10,28 +10,43 @@
 #   JavaScript     npm, nvm, pnpm (unreferenced packages only), bun, deno, node-gyp, TypeScript
 #   Python         uv, pip, Poetry, conda packages, pre-commit (unused hook envs only)
 #   PHP            Composer, the phpactor index (rebuilt when Neovim next opens a PHP project)
-#   JVM / Android  Gradle caches (skipped while a Gradle daemon runs), CocoaPods
+#   JVM / Android  Gradle caches (skipped while a Gradle daemon runs), CocoaPods, caches of
+#                  Android Studio versions no longer installed
 #   Rust / Go      downloaded crates and their unpacked sources, the Go build cache
 #   Xcode          DerivedData, simulator caches, simulators for runtimes no longer installed
 #   Docker         dangling images and the build cache, only while Docker is running
 #   Other          leftover app updater downloads, the Trash
 #
-# Never touched, only listed at the end with their sizes for a decision by hand: iPhone
-# backups, Android system images, Docker volumes and images in use, installed Node and Python
-# versions, test browsers (Puppeteer, Cypress, Playwright), ML models and ~/Downloads.
+# With -d (deep), it then asks yes or no (default no) before each of these:
+#   iPhone backups, one per device; Android system images, one each, noting any an emulator
+#   uses; Docker containers, images and build cache not in use (volumes are always kept);
+#   the Chrome cache (skipped while Chrome is open); the Codex runtimes the ChatGPT app
+#   re-downloads when needed; and pyenv Python versions other than the global one.
 #
-# Usage: cleanup [-n]
+# Never touched, only listed at the end with their sizes: installed Node versions, test
+# browsers (Puppeteer, Cypress), ML models and ~/Downloads.
+#
+# Usage: cleanup [-n] [-d]
 #   -n  dry run: show what each step would clear and its size, without deleting anything
+#   -d  deep: also ask about the large items above, one by one
 
 set -uo pipefail
 
 DRY_RUN=0
-case "${1:-}" in
-	-n|--dry-run) DRY_RUN=1 ;;
-	-h|--help) sed -n '3,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-	"") ;;
-	*) echo "cleanup: unknown option $1 (try --help)" >&2; exit 1 ;;
-esac
+DEEP=0
+for arg in "$@"; do
+	case "$arg" in
+		-n|--dry-run) DRY_RUN=1 ;;
+		-d|--deep) DEEP=1 ;;
+		-nd|-dn) DRY_RUN=1; DEEP=1 ;;
+		-h|--help) sed -n '3,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		*) echo "cleanup: unknown option $arg (try --help)" >&2; exit 1 ;;
+	esac
+done
+if (( DEEP && ! DRY_RUN )) && [ ! -t 0 ]; then
+	echo "cleanup: -d asks questions, so run it in a terminal (or add -n to list what it would ask)" >&2
+	exit 1
+fi
 
 C="$HOME/Library/Caches"
 bold=$'\e[1m'; dim=$'\e[2m'; reset=$'\e[0m'
@@ -71,8 +86,33 @@ step() {
 	fi
 }
 
+# ask QUESTION PATH... -- COMMAND...
+# Show the size of PATHs and run COMMAND only after a yes (a dry run only lists the question).
+ask() {
+	local question="$1" paths=() kb reply
+	shift
+	while [ $# -gt 0 ] && [ "$1" != "--" ]; do paths+=("$1"); shift; done
+	shift
+	kb=$(size_kb "${paths[@]}")
+	[ "$kb" -eq 0 ] && return
+	if [ "$DRY_RUN" -eq 1 ]; then
+		printf '  %8s  %s  %swould ask%s\n' "$(human "$kb")" "$question" "$dim" "$reset"
+		return
+	fi
+	read -r -p "$(printf '  %8s  %s? [y/N] ' "$(human "$kb")" "$question")" reply < /dev/tty || reply=""
+	[[ "$reply" =~ ^[Yy] ]] || return
+	if "$@" > /dev/null 2>&1; then
+		printf '            removed\n'
+	else
+		printf '            failed (run it by hand: %s)\n' "$*"
+	fi
+}
+
 # rm_paths PATH...: delete paths, for caches whose tool has no clean command
 rm_paths() { rm -rf "$@"; }
+
+# rm_image PATH: delete an Android system image and the folders it leaves empty
+rm_image() { rm -rf "$1" && rmdir "$(dirname "$1")" "$(dirname "$(dirname "$1")")" 2> /dev/null; true; }
 
 before=$(free_kb)
 echo "Free before: $(human "$before")"
@@ -111,6 +151,16 @@ else
 	step "Gradle" "$HOME/.gradle/caches" -- rm_paths "$HOME/.gradle/caches"
 fi
 has pod && step "CocoaPods" "$C/CocoaPods" -- pod cache clean --all
+# Each Android Studio version keeps its own cache folder; only the installed one is in use
+studio_info="/Applications/Android Studio.app/Contents/Resources/product-info.json"
+if [ -f "$studio_info" ]; then
+	current=$(sed -n 's/.*"dataDirectoryName": *"\([^"]*\)".*/\1/p' "$studio_info" | head -1)
+	old_studio=()
+	for d in "$C"/Google/AndroidStudio*; do
+		[ -d "$d" ] && [ -n "$current" ] && [ "$(basename "$d")" != "$current" ] && old_studio+=("$d")
+	done
+	[ ${#old_studio[@]} -gt 0 ] && step "Old Android Studio caches" "${old_studio[@]}" -- rm_paths "${old_studio[@]}"
+fi
 
 # --- Rust and Go ------------------------------------------------------------
 # The registry index stays, so cargo works offline for crates it has already resolved
@@ -125,7 +175,9 @@ step "Simulator caches" "$dev/CoreSimulator/Caches" -- rm_paths "$dev/CoreSimula
 has xcrun && [ "$DRY_RUN" -eq 0 ] && xcrun simctl delete unavailable > /dev/null 2>&1
 
 # --- Docker -----------------------------------------------------------------
-if has docker && docker info > /dev/null 2>&1; then
+docker_up=0
+has docker && docker info > /dev/null 2>&1 && docker_up=1
+if (( docker_up )); then
 	if [ "$DRY_RUN" -eq 1 ]; then
 		echo "Docker                       would remove dangling images and the build cache"
 	else
@@ -145,6 +197,65 @@ trash=("$HOME/.Trash"/*)
 shopt -u nullglob dotglob
 [ ${#trash[@]} -gt 0 ] && step "Trash" "${trash[@]}" -- rm_paths "${trash[@]}"
 
+# --- Deep: ask before each large item -----------------------------------------
+if (( DEEP )); then
+	echo
+	echo "${bold}Deep clean${reset} ${dim}(Enter keeps it; y removes it)${reset}"
+
+	# iPhone backups, one per device, named as Finder shows them
+	backups="$HOME/Library/Application Support/MobileSync/Backup"
+	for d in "$backups"/*/; do
+		d="${d%/}"
+		[ -f "$d/Info.plist" ] || continue
+		name=$(plutil -extract "Device Name" raw "$d/Info.plist" 2> /dev/null || echo "unknown device")
+		date=$(plutil -extract "Last Backup Date" raw "$d/Info.plist" 2> /dev/null | cut -c1-10)
+		ask "iPhone backup of “${name}” from ${date:-an unknown date}" "$d" -- rm_paths "$d"
+	done
+
+	# Android system images, noting any that an emulator uses or that cannot run on this Mac
+	images="$HOME/Library/Android/sdk/system-images"
+	for img in "$images"/*/*/*/; do
+		img="${img%/}"
+		[ -d "$img" ] || continue
+		rel="${img#"$HOME/Library/Android/sdk/"}"
+		note=""
+		users=$(grep -l "^image.sysdir.1 *= *$rel/" "$HOME"/.android/avd/*.avd/config.ini 2> /dev/null \
+			| xargs -n1 dirname 2> /dev/null | xargs -n1 basename 2> /dev/null | sed 's/\.avd$//' | paste -sd, -)
+		[ -n "$users" ] && note=" (used by the $users emulator)"
+		[ "$(uname -m)" = arm64 ] && [[ "$img" == */x86 || "$img" == */x86_64 ]] && note=" (x86, cannot run on this Mac)"
+		ask "Android image ${rel#system-images/}$note" "$img" -- rm_image "$img"
+	done
+
+	# Docker: everything not in use by a container, but never volumes, which hold data
+	if (( docker_up )); then
+		ask "Docker containers, images and build cache not in use (volumes kept)" \
+			"$HOME/Library/Containers/com.docker.docker" -- docker system prune --all --force
+	elif [ -d "$HOME/Library/Containers/com.docker.docker" ]; then
+		echo "  Docker is not running; start Docker Desktop and run cleanup -d again to clean it"
+	fi
+
+	# Chrome cache; deleting it under a running Chrome only gets it rewritten
+	if pgrep -xq "Google Chrome"; then
+		echo "  Chrome cache skipped while Chrome is open; quit it and run cleanup -d again"
+	else
+		ask "Chrome cache" "$C/Google/Chrome" -- rm_paths "$C/Google/Chrome"
+	fi
+
+	# Codex runtimes: the Node, Python and LibreOffice bundle the ChatGPT app's Codex agent
+	# uses for documents, plus leftover install folders; it is downloaded again when needed
+	ask "Codex runtimes (ChatGPT downloads them again when needed)" \
+		"$HOME/.cache/codex-runtimes" -- rm_paths "$HOME/.cache/codex-runtimes"
+
+	# pyenv Python versions, except the global one
+	if has pyenv; then
+		global=$(pyenv global 2> /dev/null | head -1)
+		for v in $(pyenv versions --bare --skip-aliases 2> /dev/null); do
+			[ "$v" = "$global" ] && continue
+			ask "Python $v (pyenv)" "$(pyenv root)/versions/$v" -- pyenv uninstall --force "$v"
+		done
+	fi
+fi
+
 after=$(free_kb)
 echo
 if [ "$DRY_RUN" -eq 0 ]; then
@@ -153,20 +264,27 @@ if [ "$DRY_RUN" -eq 0 ]; then
 fi
 
 # --- Left for a decision by hand --------------------------------------------
-echo "Not touched; review these by hand if you need more room:"
 review() {
 	local kb
 	kb=$(size_kb "$2")
-	[ "$kb" -gt 102400 ] && printf '  %8s  %-42s %s%s%s\n' "$(human "$kb")" "$1" "$dim" "$3" "$reset"
+	[ "$kb" -gt 102400 ] || return 0
+	if [ -n "$3" ]; then
+		printf '  %8s  %-42s %s%s%s\n' "$(human "$kb")" "$1" "$dim" "$3" "$reset"
+	else
+		printf '  %8s  %s\n' "$(human "$kb")" "$1"
+	fi
 }
-review "iPhone backups" "$HOME/Library/Application Support/MobileSync/Backup" "Finder, iPhone, Manage Backups"
-review "Android system images" "$HOME/Library/Android/sdk/system-images" "Android Studio, SDK Manager"
-review "Docker disk image" "$HOME/Library/Containers/com.docker.docker" "docker system df, then docker system prune"
+echo "Not touched; review these by hand if you need more room:"
+if (( ! DEEP )); then
+	review "iPhone backups" "$HOME/Library/Application Support/MobileSync/Backup" "cleanup -d"
+	review "Android system images" "$HOME/Library/Android/sdk/system-images" "cleanup -d"
+	review "Docker disk image" "$HOME/Library/Containers/com.docker.docker" "cleanup -d"
+	review "Python versions" "$HOME/.pyenv/versions" "cleanup -d"
+	review "Codex runtimes" "$HOME/.cache/codex-runtimes" "cleanup -d"
+	review "Chrome cache" "$C/Google/Chrome" "cleanup -d"
+fi
 review "Downloads" "$HOME/Downloads" ""
 review "Node versions" "$HOME/.nvm/versions/node" "nvm ls, then nvm uninstall VERSION"
-review "Python versions" "$HOME/.pyenv/versions" "pyenv versions, then pyenv uninstall VERSION"
 review "Puppeteer browsers" "$HOME/.cache/puppeteer" "reinstalled by npm install in projects using it"
 review "Cypress binaries" "$C/Cypress" "npx cypress cache prune"
-review "Codex runtimes" "$HOME/.cache/codex-runtimes" ""
 review "Hugging Face models" "$HOME/.cache/huggingface" ""
-review "Chrome cache" "$C/Google" "Chrome, Clear browsing data"

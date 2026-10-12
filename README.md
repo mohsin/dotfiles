@@ -26,7 +26,7 @@ remove what you do not want before running anything. Use at your own risk.
 | `bootstrap.sh` | Copies everything above into the home directory |
 | `.macos` | macOS defaults and a hidden-at-login Ghostty |
 | `init/` | Files `.macos` and `bootstrap.sh` install: a launch agent and a Terminal.app theme |
-| `bin/` | Small scripts, copied into `~/bin`, including `dotfiles` (keeps the copies and the repository in step), `cleanup` (frees disk space by clearing the caches of every tool in the Brewfile; `cleanup -n` shows what it would clear) and `mediapack` (shrinks a folder of iPhone photos and videos in place for archiving, keeping originals as `*.bak.*` until `mediaclean`) |
+| `bin/` | Small scripts, copied into `~/bin`, including `dotfiles` (keeps the copies and the repository in step), `cleanup` (frees disk space by clearing the caches of every tool in the Brewfile; `cleanup -n` shows what it would clear, `cleanup -d` also asks before removing iPhone backups, Android images and other large items) and `mediapack` (shrinks a folder of iPhone photos and videos in place for archiving, keeping originals as `*.bak.*` until `mediaclean`) |
 | `.vimrc`, `.vim/` | Plain Vim, for machines without Neovim |
 
 ## Installation
