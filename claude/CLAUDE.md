@@ -10,6 +10,7 @@
 - Format: `type(scope): description` — scope is optional; only include it when there is a very distinct, obvious module (e.g. `fix(guestlist):`, `feat(newsletter):`). Plain `fix:` or `feat:` is perfectly fine otherwise
 - Valid types: feat, fix, refactor, docs, test, chore, style, perf
 - Commit body is bullet points only — no extra description line between the title and the bullets; the title already summarises the change
+- Each body bullet is one complete clause that reads on its own: a verb and what it acted on. Never a comma-spliced run of fragments, and never one that ends on a bare word (`Added pivot: Attach from the picker, pivot fields, Remove` is wrong; `Added pivot on a relation with Attach, pivot fields, and a Remove that keeps the record` is right)
 
 ### Choosing the type
 
