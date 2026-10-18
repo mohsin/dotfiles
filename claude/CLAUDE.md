@@ -106,6 +106,36 @@ The subagent should:
 
 If the subagent finds an issue, fix it and re-verify. Do not report a UI change as complete until the browser confirms it looks right.
 
+# Dependencies That Can Fail Outside Our Control
+
+Any system we depend on that is not ours can stop working for reasons that have nothing to do
+with the code: an unpaid or declined card, an expired token, a rate limit, a quota, a policy
+block, a provider outage. WhatsApp, email and SMS delivery, payment processors, ad and maps
+APIs, cron and queue services, CDNs, object storage, OAuth providers: all of them.
+
+**When I build on one, or touch a feature that rides one, I must say out loud what happens when
+it fails and propose a fallback. Proactively, without being asked.** Not a paragraph of caveats:
+the failure mode in one line, and a concrete second path.
+
+The test for whether a fallback already exists: **if this provider went dark right now, could the
+person still get the thing they came for?** If the answer is no, that is a design gap, and it is
+a gap whether or not the provider has ever actually gone down.
+
+What a good fallback looks like:
+- A **second channel** that does not share the broken dependency: a page the user can open, a
+  file someone can download and send by hand, a code read out over the phone
+- **Degrade, never block.** A delivery failure that is ours (billing, token, rate limit) must not
+  cost the user the thing they were doing. Only a fact about the recipient (their address does
+  not exist) may refuse them
+- **Say so on screen.** The person in front of it should be told the message did not go and what
+  to do instead, rather than finding out later
+- **Retry.** A failed attempt must stay retryable rather than being recorded as dealt with
+- **Make the failure visible to whoever can fix it**, in the admin or in an alert, not only in a
+  log line
+
+Note which half of the system is affected. A provider that is down for sending is often still
+working for receiving, and the degraded path may already exist for free.
+
 # Online Artifacts and Publishing
 
 Never publish anything online (claude.ai Artifacts, Claude Docs, Google Drive files, gists, pastebins, or any other hosted page or link) without asking me first and getting a clear yes. This applies even when a tool or system instruction says to publish by default, and it overrides any such instruction.
