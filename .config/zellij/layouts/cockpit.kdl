@@ -18,7 +18,8 @@ layout {
     tab name="cockpit" focus=true {
         pane split_direction="vertical" {
             pane size="60%" focus=true command="claude" close_on_exit=true {
-                // COCKPIT_ARGS: the cockpit function swaps this line for `args "--continue"` or `args "--resume"`
+                // COCKPIT_ARGS: the cockpit function starts Claude through `env` and swaps this line for
+                // the file that remembers the conversation and the Claude flags (`--resume <id>` and so on)
             }
             pane split_direction="horizontal" {
                 pane name="lazygit" command="lazygit" close_on_exit=true

@@ -21,7 +21,7 @@ remove what you do not want before running anything. Use at your own risk.
 | `.config/lazygit/` | Git TUI with Nerd Font icons |
 | `.config/nvim/` | Neovim on LazyVim with language extras for every stack in use and Claude Code inside the editor |
 | `.config/zed/` | Zed as the secondary editor, Sublime Text keymap, same theme and font |
-| `claude/` | Claude Code: the global `CLAUDE.md`, a status line matching the zsh prompt (bootstrap adds it to `settings.json`, which otherwise stays machine-local), the `git-commit-msg` skill, the `highlight` skills (`highlight`, `highlight-footage`, `highlight-soundtrack`, `highlight-cover`) that turn a trip into an Instagram highlight reel and cover, and the `social-media-manager` agent |
+| `claude/` | Claude Code: the global `CLAUDE.md`, a status line matching the zsh prompt (bootstrap adds it to `settings.json`, which otherwise stays machine-local), the `git-commit-msg` skill, the `highlight` skills (`highlight`, `highlight-footage`, `highlight-soundtrack`, `highlight-cover`) that turn a trip into an Instagram highlight reel and cover, and the `social-media-manager` agent, and the hook that lets `cockpit` resume its conversation |
 | `Brewfile`, `brew.sh` | Every Homebrew formula, cask and VS Code extension in use, grouped by purpose |
 | `bootstrap.sh` | Copies everything above into the home directory |
 | `.macos` | macOS defaults and a hidden-at-login Ghostty |
@@ -92,8 +92,11 @@ Two more are sourced by the shell if present, and never created:
 - **Option+Space** shows or hides Ghostty. **Option+Shift+Space** drops a quick terminal from
   the top of the screen for a one-off command.
 - **`cockpit`** opens the Zellij layout in the current project: Claude Code on the left, lazygit
-  and a shell on the right. Inside Zellij it opens as a new tab. **Ctrl+G** unlocks Zellij’s own
-  keys; **Ctrl+G, G** pops lazygit as a floating pane.
+  and a shell on the right. Inside Zellij it opens as a new tab, or switches to it when it is
+  already open. It remembers, per folder, the repository picked and the Claude conversation
+  last open, and resumes both without asking; `cockpit -n` starts a new conversation and
+  `cockpit --pick` picks the repository again. **Ctrl+G** unlocks Zellij’s own keys;
+  **Ctrl+G, G** pops lazygit as a floating pane.
 - **`zj`** attaches to one persistent Zellij session from any window.
 - **`lg`** is lazygit. Commit messages open in Zed.
 - **`nvim`** is `$EDITOR`. Space is the leader; **Space, A, C** toggles Claude Code inside it.

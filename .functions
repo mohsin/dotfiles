@@ -134,26 +134,34 @@ function _cockpit_session_name() {
 }
 
 # Open the Claude Code + lazygit + shell layout (see .config/zellij/layouts/cockpit.kdl),
-# as a new tab when already inside Zellij. Claude runs in the current directory; lazygit and
-# the shell run in the git repository: this directory, the one given with -p, or one picked
-# from Projects/ when started from a client folder.
-#   cockpit               start a new Claude session
-#   cockpit -c            continue the most recent Claude session of this directory
-#   cockpit -r [id]       pick a past session of this directory, or resume the given one
-#   cockpit -p <repo>     repository for lazygit and the shell
+# as a new tab when already inside Zellij, or switch to the tab when it is already open.
+# Claude runs in the current directory; lazygit and the shell run in the git repository: this
+# directory, the one given with -p, or one picked from Projects/ when started from a client
+# folder. Both choices are remembered per directory, so a plain `cockpit` comes back to the
+# same repository and the same Claude conversation without asking.
+#   cockpit               resume the conversation last open here (a new one the first time)
+#   cockpit -n            start a new Claude conversation, remembered from then on
+#   cockpit -c            continue the most recent Claude conversation of this directory
+#   cockpit -r [id]       pick a past conversation of this directory, or resume the given one
+#   cockpit -p <repo>     repository for lazygit and the shell, remembered from then on
+#   cockpit --pick        pick the repository from Projects/ again
+# The conversation is tracked by claude/hooks/cockpit-session.sh, so /clear and /resume inside
+# the cockpit move the remembered conversation along with them.
 function cockpit() {
 	if [ ! -t 0 ]; then
 		echo "cockpit needs an interactive terminal (run it in Ghostty, not through a tool)"
 		return 1
 	fi
-	local args="" project=""
+	local mode="resume" args="" project="" pick=0
 	while [ $# -gt 0 ]; do
 		case "$1" in
-			-c|--continue) args='args "--continue"' ;;
+			-n|--new) mode="new" ;;
+			-c|--continue) mode="explicit"; args=' "--continue"' ;;
 			-r|--resume)
-				args='args "--resume"'
+				mode="explicit"
+				args=' "--resume"'
 				if [ -n "${2:-}" ] && [ "${2#-}" = "${2}" ]; then
-					args="args \"--resume\" \"${2}\""
+					args=" \"--resume\" \"${2}\""
 					shift
 				fi
 				;;
@@ -165,14 +173,21 @@ function cockpit() {
 				project="${2}"
 				shift
 				;;
-			*) echo "Usage: cockpit [-c|--continue] [-r|--resume [session-id]] [-p|--project <repo>]"; return 1 ;;
+			--pick) pick=1 ;;
+			*) echo "Usage: cockpit [-n|--new] [-c|--continue] [-r|--resume [session-id]] [-p|--project <repo>] [--pick]"; return 1 ;;
 		esac
 		shift
 	done
 
+	local state="${XDG_STATE_HOME:-$HOME/.local/state}/cockpit"
+	local repo_file="${state}/$(printf '%s' "${PWD}" | shasum | cut -c1-16).repo"
+	mkdir -p "${state}"
+
 	if [ -z "${project}" ]; then
 		if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
 			project="."
+		elif [ "${pick}" -eq 0 ] && [ -d "$(cat "${repo_file}" 2> /dev/null)" ]; then
+			project="$(cat "${repo_file}")"
 		else
 			[ -n "${ZSH_VERSION}" ] && setopt local_options null_glob
 			local candidates=() dir choice i
@@ -201,37 +216,65 @@ function cockpit() {
 		fi
 	fi
 	project="$(cd "${project}" 2> /dev/null && pwd)" || { echo "cockpit: no such directory: ${project}"; return 1; }
+	printf '%s\n' "${project}" > "${repo_file}"
+
+	# The session is named after the repository, so the terminal tab reads "repo | title".
+	# An open tab or running session of that name is reused rather than duplicated.
+	local session zstate
+	session="$(_cockpit_session_name "${project}")"
+	if [ -n "${ZELLIJ}" ] && zellij action query-tab-names 2> /dev/null | grep -qxF "${session}"; then
+		zellij action go-to-tab-name "${session}"
+		return
+	fi
+	if [ -z "${ZELLIJ}" ]; then
+		zstate="$(zellij list-sessions --no-formatting 2> /dev/null \
+			| awk -v s="${session}" '$1 == s { print (index($0, "EXITED") ? "exited" : "running"); exit }')"
+		if [ "${zstate}" = "running" ]; then
+			echo "cockpit: attaching to the running '${session}' session"
+			zellij attach "${session}"
+			return
+		fi
+	fi
+
+	# One remembered conversation per directory and repository. Resume it while Claude still
+	# has it; otherwise (first run, -n, or a conversation Claude has since deleted) start a new
+	# one under an ID chosen here, so it is remembered from its first message.
+	local session_file sid
+	session_file="${state}/$(printf '%s\t%s' "${PWD}" "${project}" | shasum | cut -c1-16).session"
+	if [ "${mode}" = "resume" ]; then
+		sid="$(cat "${session_file}" 2> /dev/null)"
+		if [ -n "${sid}" ] && [ -n "$(find "$HOME/.claude/projects" -maxdepth 2 -name "${sid}.jsonl" -print -quit 2> /dev/null)" ]; then
+			args=" \"--resume\" \"${sid}\""
+		else
+			mode="new"
+		fi
+	fi
+	if [ "${mode}" = "new" ]; then
+		sid="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+		printf '%s\n' "${sid}" > "${session_file}"
+		args=" \"--session-id\" \"${sid}\""
+	fi
 
 	# Zellij layouts take no arguments, so build one from the template with the Claude flags
-	# and the working directories filled in
+	# and the working directories filled in. Claude starts through `env` so that it, and the
+	# hook that tracks its conversation, know which file to remember the conversation in.
 	local template="${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/layouts/cockpit.kdl"
 	local layout
 	layout="$(mktemp -t cockpit).kdl" || return 1
-	awk -v args="${args}" -v here="${PWD}" -v repo="${project}" '
-		/COCKPIT_ARGS/ { if (args != "") { sub(/\/\/.*/, args) } else { next } }
-		/command="claude"/ { sub(/ \{$/, " cwd=\"" here "\" {") }
+	awk -v args="${args}" -v here="${PWD}" -v repo="${project}" -v file="${session_file}" '
+		/COCKPIT_ARGS/ { sub(/\/\/.*/, "args \"COCKPIT_SESSION_FILE=" file "\" \"claude\"" args) }
+		/command="claude"/ { sub(/command="claude"/, "command=\"env\""); sub(/ \{$/, " cwd=\"" here "\" {") }
 		/name="lazygit"/ || /name="shell"/ { $0 = $0 " cwd=\"" repo "\"" }
 		{ print }
 	' "${template}" > "${layout}"
-	# The session is named after the repository, so the terminal tab reads "repo | title".
-	# A running session of that name is reattached rather than duplicated.
-	local session state
-	session="$(_cockpit_session_name "${project}")"
 	if [ -n "${ZELLIJ}" ]; then
 		zellij action new-tab --layout "${layout}" --name "${session}"
 	else
-		state="$(zellij list-sessions --no-formatting 2> /dev/null \
-			| awk -v s="${session}" '$1 == s { print (index($0, "EXITED") ? "exited" : "running"); exit }')"
-		if [ "${state}" = "running" ]; then
-			echo "cockpit: attaching to the running '${session}' session"
-			zellij attach "${session}"
-		else
-			# A dead session still holds its name, so release it before reusing the name
-			[ "${state}" = "exited" ] && zellij delete-session "${session}" --force > /dev/null 2>&1
-			# -n starts a new session; -l would try to add the layout to an existing
-			# session of that name and fail with "Session not found" when there is none
-			zellij --session "${session}" --new-session-with-layout "${layout}"
-		fi
+		# A dead session still holds its name, so release it before reusing the name
+		[ "${zstate}" = "exited" ] && zellij delete-session "${session}" --force > /dev/null 2>&1
+		# -n starts a new session; -l would try to add the layout to an existing
+		# session of that name and fail with "Session not found" when there is none
+		zellij --session "${session}" --new-session-with-layout "${layout}"
 	fi
 	rm -f "${layout}" "${layout%.kdl}"
 }

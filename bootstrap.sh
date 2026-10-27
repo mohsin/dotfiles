@@ -267,6 +267,19 @@ if command -v jq > /dev/null && ! jq -e '.statusLine' "$settings" > /dev/null 2>
 	fi
 fi
 
+# The hook that lets `cockpit` resume the conversation last open in it, added alongside any
+# SessionStart hooks already there
+if command -v jq > /dev/null \
+	&& ! jq -e '[.hooks.SessionStart[]?.hooks[]?.command] | any(test("cockpit-session"))' "$settings" > /dev/null 2>&1; then
+	echo "  merge:  cockpit SessionStart hook into ~/.claude/settings.json"
+	if (( ! DRY_RUN )); then
+		mkdir -p "$HOME/.claude"
+		[ -f "$settings" ] || echo '{}' > "$settings"
+		jq '.hooks.SessionStart = (.hooks.SessionStart // []) + [{hooks: [{type: "command", command: "bash ~/.claude/hooks/cockpit-session.sh"}]}]' \
+			"$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+	fi
+fi
+
 # 10. Remember what was installed and from where, for the next run and for bin/dotfiles
 if (( ! DRY_RUN )); then
 	mkdir -p "$STATE"
