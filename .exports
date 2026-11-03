@@ -9,7 +9,10 @@ export PATH="$HOME/bin:$PATH";
 [ -d "$HOME/.composer/vendor/bin" ] && export PATH="$HOME/.composer/vendor/bin:$PATH";
 [ -d "$HOME/Library/Android/sdk/platform-tools" ] && export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH";
 [ -d "/Applications/Blender/blender.app/Contents/MacOS" ] && export PATH="/Applications/Blender/blender.app/Contents/MacOS:$PATH";
-[ -d "/opt/homebrew/opt/openjdk@11/bin" ] && export PATH="/opt/homebrew/opt/openjdk@11/bin:$PATH"; # `java` defaults to 11
+# `java` defaults to the latest Homebrew openjdk. The unversioned opt path
+# follows future `brew upgrade openjdk` without another edit here.
+[ -d "/opt/homebrew/opt/openjdk/bin" ] && export PATH="/opt/homebrew/opt/openjdk/bin:$PATH";
+[ -d "/opt/homebrew/opt/openjdk" ] && export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk}";
 [ -d "$HOME/google-cloud-sdk/bin" ] && export PATH="$HOME/google-cloud-sdk/bin:$PATH";
 [ -d "$HOME/Library/Preferences/netlify/helper/bin" ] && export PATH="$HOME/Library/Preferences/netlify/helper/bin:$PATH";
 [ -d "$HOME/.antigravity/antigravity/bin" ] && export PATH="$HOME/.antigravity/antigravity/bin:$PATH";
