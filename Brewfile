@@ -78,7 +78,8 @@ brew "shivammathur/php/php@7.3", trusted: true
 brew "shivammathur/php/php@7.4", trusted: true
 brew "phpunit"
 brew "wp-cli"
-brew "openjdk@11"          # first on PATH
+brew "openjdk"             # default `java`, first on PATH (see .exports)
+brew "openjdk@11"          # older projects
 brew "openjdk@17"          # Gradle and Android builds
 brew "kotlin"
 brew "gradle"
@@ -136,7 +137,6 @@ brew "graphviz"
 brew "potrace"             # bitmap to vector
 brew "woff2"
 brew "bramstein/webfonttools/sfnt2woff", trusted: true         # WOFF conversion for web fonts
-brew "bramstein/webfonttools/sfnt2woff-zopfli", trusted: true
 brew "advancecomp"         # recompress PNG and ZIP
 
 # --- Security, reverse engineering and networking -----------------------------
@@ -149,11 +149,11 @@ brew "jadx"
 brew "bundletool"
 brew "cifer"
 brew "testdisk"            # data recovery
+brew "ngrep"               # `sniff` alias
 brew "putty"
 brew "libusbmuxd", args: ["HEAD"]         # iOS device tooling (HEAD builds track new iOS releases)
 brew "libimobiledevice", args: ["HEAD"]
 brew "ios-webkit-debug-proxy", args: ["HEAD"]
-cask "blobsaver"
 cask "macfuse"
 brew "gromgit/fuse/ntfs-3g-mac", trusted: true   # write to NTFS drives (needs macfuse)
 

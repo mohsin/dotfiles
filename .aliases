@@ -93,7 +93,7 @@ command -v md5sum > /dev/null || alias md5sum="md5"
 command -v sha1sum > /dev/null || alias sha1sum="shasum"
 
 # JavaScriptCore REPL
-jscbin="/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Resources/jsc";
+jscbin="/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc";
 [ -e "${jscbin}" ] && alias jsc="${jscbin}";
 unset jscbin;
 
@@ -136,10 +136,8 @@ alias spoton="sudo mdutil -a -i on"
 # PlistBuddy alias, because sometimes `defaults` just doesn’t cut it
 alias plistbuddy="/usr/libexec/PlistBuddy"
 
-# Airport CLI alias (deprecated by Apple since macOS 14.4, so only define it while the binary exists)
-airportbin="/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport";
-[ -e "${airportbin}" ] && alias airport="${airportbin}";
-unset airportbin;
+# Wi-Fi details (network, signal, channel); replaces the `airport` binary Apple removed
+alias wifi="sudo wdutil info"
 
 # Ring the terminal bell, and put a badge on Terminal.app’s Dock icon
 # (useful when executing time-consuming commands)
