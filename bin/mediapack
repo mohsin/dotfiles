@@ -3,6 +3,8 @@
 # Shrink a tree of iPhone photos and videos in place for long-term storage on a disk, keeping
 # the folder structure. Each original is kept beside its replacement as NAME.bak.EXT until
 # `mediapack --clean` removes the backups, so nothing is lost until you have checked the result.
+# The clean also deletes AAE files: Apple Photos edit instructions that nothing else can show,
+# whose edit survives as the rendered IMG_E copy.
 #
 #   Videos (MOV, MP4, M4V; AVI, MKV, MTS, 3GP become MOV): HEVC on the Apple Silicon media
 #     engine, keeping HDR (HLG), 10-bit, rotation, frame timing, every audio track (spatial
@@ -16,7 +18,7 @@
 #   JPEG: re-packed as JPEG XL, bit-for-bit reversible (`djxl IMG.jxl IMG.jpg` gives back the
 #     original file), about 20 to 30% smaller.
 #   PNG: lossless JPEG XL, identical pixels, about half the size.
-#   HEIC, HEIF, AVIF, DNG, GIF, AAE and everything else: untouched (already efficient, or
+#   HEIC, HEIF, AVIF, DNG, GIF and everything else: untouched (already efficient, or
 #     re-encoding would lose quality or Apple metadata).
 #
 # Every conversion is checked before the original is renamed: video quality, duration and
@@ -24,7 +26,7 @@
 # files carry a marker and are skipped, as are backups and anything already converted.
 #
 # Usage: mediapack [-n] [-q QUALITY] PATH...      convert (PATH is a folder or a file)
-#        mediapack --clean [-n] [-y] FOLDER...    delete the NAME.bak.EXT backups
+#        mediapack --clean [-n] [-y] FOLDER...    delete the NAME.bak.EXT backups and AAE files
 #   -n  dry run: print what would happen without touching anything
 #   -q  starting video quality 1-100 (default 65; MEDIAPACK_VMAF sets the score to reach)
 #   -y  delete backups without asking
@@ -290,7 +292,7 @@ process() {
 }
 
 clean() {
-	local dir="$1" list total=0 n=0 f base stem
+	local dir="$1" list total=0 n=0 aae=0 f base stem
 	ROOT="${dir%/}"
 	list="$(mktemp)"
 	# Only a backup whose converted file is still there counts, so an unrelated file that
@@ -303,11 +305,19 @@ clean() {
 		printf '%s\0' "$f" >> "$list"
 		total=$(( total + $(size_of "$f") )); n=$(( n + 1 ))
 	done < <(find "$dir" -type f -name '*.bak.*' -print0)
+	# AAE files are Apple Photos edit instructions; nothing else can show them, and the edit
+	# itself is kept as the rendered IMG_E copy, so they go too.
+	while IFS= read -r -d '' f; do
+		[[ "$(basename "$f")" == ._* ]] && continue
+		printf '%s\0' "$f" >> "$list"
+		total=$(( total + $(size_of "$f") )); aae=$(( aae + 1 ))
+	done < <(find "$dir" -type f -iname '*.aae' -print0)
 
-	if (( n == 0 )); then
-		echo "No backups under $dir."; rm -f "$list"; return
+	local what="$n backups and $aae AAE edit files"
+	if (( n + aae == 0 )); then
+		echo "No backups or AAE files under $dir."; rm -f "$list"; return
 	fi
-	echo "$n backups under $dir, $(human "$total")."
+	echo "$what under $dir, $(human "$total")."
 	if (( DRY_RUN )); then
 		while IFS= read -r -d '' f; do echo "  $(rel "$f")"; done < "$list"
 		rm -f "$list"; return
@@ -320,7 +330,7 @@ clean() {
 		rm -f "$f" "$(dirname "$f")/._$(basename "$f")"
 	done < "$list"
 	rm -f "$list"
-	echo "Deleted $n backups, freed $(human "$total")."
+	echo "Deleted $what, freed $(human "$total")."
 }
 
 paths=()
