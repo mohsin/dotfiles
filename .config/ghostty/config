@@ -48,6 +48,10 @@ macos-option-as-alt = true
 copy-on-select = clipboard
 mouse-hide-while-typing = true
 clipboard-paste-protection = true
+# Cmd+K clears by sending Ctrl+L to the program in front, rather than Ghostty clearing its own
+# screen: inside Zellij that never reaches the pane, so the cockpit shell stayed as it was.
+# zsh's Ctrl+L (see .zshrc) also drops the scrollback, as Ghostty's clear did.
+keybind = super+k=text:\x0c
 
 # --- Splits ---
 # Ghostty's defaults already cover Cmd+D / Cmd+Shift+D (split), Cmd+Alt+arrows

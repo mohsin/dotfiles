@@ -45,6 +45,10 @@ bindkey '^[[1;3C' forward-word                   # Alt+Right / Alt+Left
 bindkey '^[[1;3D' backward-word
 bindkey '^[[3~' delete-char                      # Delete
 bindkey '^[[3;3~' kill-word                      # Alt+Delete
+# Ctrl+L (also sent by Cmd+K in Ghostty): clear the screen and the scrollback, keeping what is typed
+clear-screen-and-scrollback() { printf '\e[3J'; zle clear-screen; }
+zle -N clear-screen-and-scrollback
+bindkey '^L' clear-screen-and-scrollback
 
 # --- Completion --------------------------------------------------------------
 autoload -Uz compinit
